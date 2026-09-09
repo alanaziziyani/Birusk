@@ -25,6 +25,7 @@ func InitDB(filepath string) {
 		expire_time INTEGER DEFAULT 0,
 		vless_enabled INTEGER DEFAULT 1,
 		trojan_enabled INTEGER DEFAULT 1,
+		vmess_enabled INTEGER DEFAULT 1,
 		custom_remark TEXT DEFAULT '',
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
@@ -35,6 +36,14 @@ func InitDB(filepath string) {
 		type TEXT NOT NULL,
 		address TEXT NOT NULL,
 		clean_ip TEXT DEFAULT '',
+		port INTEGER DEFAULT 443,
+		transport TEXT DEFAULT 'ws',
+		security TEXT DEFAULT 'tls',
+		path TEXT DEFAULT '/',
+		host TEXT DEFAULT '',
+		pbk TEXT DEFAULT '',
+		sid TEXT DEFAULT '',
+		flow TEXT DEFAULT '',
 		token TEXT UNIQUE NOT NULL,
 		status TEXT DEFAULT 'active'
 	);
@@ -57,12 +66,24 @@ func InitDB(filepath string) {
 		log.Fatal(err)
 	}
 
-	// آپدیت خودکار دیتابیس‌های قدیمی بدون پاک شدن اطلاعات قبلی کاربران و نودها
+	// --- آپدیت‌های قبلی دیتابیس ---
 	DB.Exec("ALTER TABLE users ADD COLUMN expire_time INTEGER DEFAULT 0;")
 	DB.Exec("ALTER TABLE nodes ADD COLUMN clean_ip TEXT DEFAULT '';")
 	DB.Exec("ALTER TABLE users ADD COLUMN vless_enabled INTEGER DEFAULT 1;")
 	DB.Exec("ALTER TABLE users ADD COLUMN trojan_enabled INTEGER DEFAULT 1;")
 	DB.Exec("ALTER TABLE users ADD COLUMN custom_remark TEXT DEFAULT '';")
+
+	// --- آپدیت‌های فاز 1: ترنسپورت‌ها، پروتکل‌ها و امنیت (بدون حذف دیتا) ---
+	DB.Exec("ALTER TABLE users ADD COLUMN vmess_enabled INTEGER DEFAULT 1;")
+	
+	DB.Exec("ALTER TABLE nodes ADD COLUMN port INTEGER DEFAULT 443;")
+	DB.Exec("ALTER TABLE nodes ADD COLUMN transport TEXT DEFAULT 'ws';")
+	DB.Exec("ALTER TABLE nodes ADD COLUMN security TEXT DEFAULT 'tls';")
+	DB.Exec("ALTER TABLE nodes ADD COLUMN path TEXT DEFAULT '/';")
+	DB.Exec("ALTER TABLE nodes ADD COLUMN host TEXT DEFAULT '';")
+	DB.Exec("ALTER TABLE nodes ADD COLUMN pbk TEXT DEFAULT '';")
+	DB.Exec("ALTER TABLE nodes ADD COLUMN sid TEXT DEFAULT '';")
+	DB.Exec("ALTER TABLE nodes ADD COLUMN flow TEXT DEFAULT '';")
 
 	// مقداردهی اولیه تنظیمات پیش‌فرض در صورت عدم وجود
 	initDefaultSettings()
@@ -72,8 +93,9 @@ func initDefaultSettings() {
 	defaults := map[string]string{
 		"sub_domain":       "",
 		"default_clean_ip": "",
+		"enable_stats":     "1",
 		"mtproto_enabled":  "0",
-		"mtproto_port":     "8443",
+		"mtproto_port":     "8566",
 		"mtproto_secret":   "",
 		"mtproto_tag":      "",
 	}

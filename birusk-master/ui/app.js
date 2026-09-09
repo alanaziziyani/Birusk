@@ -126,6 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (hintEl) hintEl.innerText = hex;
     };
 
+    // --- فرم یوزرها (پشتیبانی از VMess) ---
     window.openUserWizard = (id = null) => {
         if (id) {
             const u = usersData.find(x => x.id === id);
@@ -142,6 +143,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             document.getElementById('form-user-vless').checked = (u.vless_enabled !== 0);
             document.getElementById('form-user-trojan').checked = (u.trojan_enabled !== 0);
+            document.getElementById('form-user-vmess').checked = (u.vmess_enabled !== 0);
             document.getElementById('form-user-remark').value = u.custom_remark || '';
             
             document.getElementById('user-modal-title').innerText = currentLang === 'fa' ? 'ویرایش کانفیگ و اشتراک' : 'Edit Subscription';
@@ -153,6 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             document.getElementById('form-user-vless').checked = true;
             document.getElementById('form-user-trojan').checked = true;
+            document.getElementById('form-user-vmess').checked = true;
             document.getElementById('form-user-remark').value = '';
             
             document.getElementById('user-modal-title').innerText = currentLang === 'fa' ? 'ایجاد اشتراک جدید' : 'Create Subscription';
@@ -165,8 +168,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const name = document.getElementById('form-user-name').value;
         const limit = parseFloat(document.getElementById('form-user-limit').value || 0);
         const days = parseInt(document.getElementById('form-user-days').value || 0);
+        
         const useVless = document.getElementById('form-user-vless').checked;
         const useTrojan = document.getElementById('form-user-trojan').checked;
+        const useVmess = document.getElementById('form-user-vmess').checked;
         const remark = document.getElementById('form-user-remark').value;
 
         if (!name) return alert('Name is required!');
@@ -180,6 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
             expire_time: exp,
             vless_enabled: useVless,
             trojan_enabled: useTrojan,
+            vmess_enabled: useVmess,
             custom_remark: remark
         };
 
@@ -210,6 +216,28 @@ document.addEventListener('DOMContentLoaded', () => {
         renderContent('users');
     };
 
+    // --- منطق داینامیک نمایش فیلدهای نود ---
+    window.toggleNodeFields = () => {
+        const transport = document.getElementById('form-node-transport').value;
+        const security = document.getElementById('form-node-security').value;
+        
+        const groupReality = document.getElementById('group-reality');
+        const labelPath = document.getElementById('label-path');
+        
+        if (security === 'reality') {
+            groupReality.style.display = 'flex';
+        } else {
+            groupReality.style.display = 'none';
+        }
+
+        if (transport === 'grpc') {
+            labelPath.innerText = 'gRPC ServiceName';
+        } else {
+            labelPath.innerText = 'WebSocket Path';
+        }
+    };
+
+    // --- فرم نودها (پشتیبانی از Transport/Security/REALITY) ---
     window.openNodeWizard = (id = null) => {
         if (id) {
             const n = nodesData.find(x => x.id === id);
@@ -217,14 +245,34 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('form-node-name').value = n.name;
             document.getElementById('form-node-addr').value = n.address;
             document.getElementById('form-node-type').value = n.type;
+            
+            document.getElementById('form-node-port').value = n.port || 443;
+            document.getElementById('form-node-transport').value = n.transport || 'ws';
+            document.getElementById('form-node-security').value = n.security || 'tls';
+            document.getElementById('form-node-path').value = n.path || '/';
+            document.getElementById('form-node-host').value = n.host || '';
+            document.getElementById('form-node-pbk').value = n.pbk || '';
+            document.getElementById('form-node-sid').value = n.sid || '';
+            
             document.getElementById('node-modal-title').innerText = currentLang === 'fa' ? 'ویرایش نود زیرساخت' : 'Edit Infrastructure Node';
         } else {
             document.getElementById('form-node-id').value = '';
             document.getElementById('form-node-name').value = '';
             document.getElementById('form-node-addr').value = '';
             document.getElementById('form-node-type').value = 'cloudflare';
+            
+            document.getElementById('form-node-port').value = 443;
+            document.getElementById('form-node-transport').value = 'ws';
+            document.getElementById('form-node-security').value = 'tls';
+            document.getElementById('form-node-path').value = '/';
+            document.getElementById('form-node-host').value = '';
+            document.getElementById('form-node-pbk').value = '';
+            document.getElementById('form-node-sid').value = '';
+            
             document.getElementById('node-modal-title').innerText = currentLang === 'fa' ? 'ثبت نود زیرساخت جدید' : 'Register New Edge Node';
         }
+        
+        window.toggleNodeFields();
         openModal('node-modal');
     };
 
@@ -233,10 +281,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const name = document.getElementById('form-node-name').value;
         const addr = document.getElementById('form-node-addr').value;
         const type = document.getElementById('form-node-type').value;
+        
+        const port = parseInt(document.getElementById('form-node-port').value || 443);
+        const transport = document.getElementById('form-node-transport').value;
+        const security = document.getElementById('form-node-security').value;
+        const path = document.getElementById('form-node-path').value;
+        const host = document.getElementById('form-node-host').value;
+        const pbk = document.getElementById('form-node-pbk').value;
+        const sid = document.getElementById('form-node-sid').value;
 
         if (!name || !addr) return alert('Name and Address are required!');
 
-        const payload = { name: name, type: type, address: addr };
+        const payload = { 
+            name: name, type: type, address: addr,
+            port: port, transport: transport, security: security,
+            path: path, host: host, pbk: pbk, sid: sid
+        };
         
         const btn = document.getElementById('btn-save-node');
         btn.disabled = true;
@@ -273,7 +333,7 @@ document.addEventListener('DOMContentLoaded', () => {
         coreSettings.enableStats = document.getElementById('setting-stats').checked;
         
         coreSettings.mtprotoEnabled = document.getElementById('setting-mtproto-enable').checked;
-        coreSettings.mtprotoPort = document.getElementById('setting-mtproto-port').value; // همون 8566 داخل سرور
+        coreSettings.mtprotoPort = document.getElementById('setting-mtproto-port').value; 
         coreSettings.mtprotoSecret = document.getElementById('setting-mtproto-secret').value;
         coreSettings.mtprotoTag = document.getElementById('setting-mtproto-tag').value;
         
@@ -373,17 +433,6 @@ document.addEventListener('DOMContentLoaded', () => {
                                 
                                 let tgBtnHtml = '';
                                 if (coreSettings.mtprotoEnabled && coreSettings.mtprotoPort && coreSettings.mtprotoSecret) {
-                                    // تولید لینک با سکرت FakeTLS برای کلاینت‌های تلگرام (ترکیب ee + سکرت + هگز google.com)
-                                    let baseSecret = coreSettings.mtprotoSecret;
-                                    let finalClientSecret = baseSecret;
-                                    
-                                    if (baseSecret.length === 32) {
-                                        const fakeDomainHex = '676f6f676c652e636f6d'; // google.com in hex
-                                        finalClientSecret = 'ee' + baseSecret + fakeDomainHex;
-                                    }
-                                    
-                                    // اینجا حتما باید پورت ۵ رقمی ریلوی رو به جای پورت داخلی برای کاربر بذارید.
-                                    // اما چون پنل نمی‌تونه به صورت خودکار پورت بیرونی ریلوی رو بخونه، فعلا فقط پیام راهنما میده.
                                     let tgServer = 'لطفاً از لینکی که ربات تلگرام به شما داده استفاده کنید!';
                                     tgBtnHtml = `<button onclick="alert('${tgServer}')" class="btn-telegram" style="padding:8px 12px; font-size:0.85rem; border-radius:8px;">✈️ Info</button>`;
                                 }
@@ -436,8 +485,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         <thead>
                             <tr>
                                 <th>Node Identity</th>
-                                <th>Server Target / Connection</th>
-                                <th>Deployment Type</th>
+                                <th>Server Target / Port</th>
+                                <th>Protocol Specs</th>
                                 <th data-i18n="table_status">Status</th>
                                 <th>API Access</th>
                             </tr>
@@ -446,11 +495,19 @@ document.addEventListener('DOMContentLoaded', () => {
                             ${nodesData.map(n => `
                                 <tr>
                                     <td style="font-weight:bold; font-size:1.05rem;">${n.name}</td>
-                                    <td><span style="font-family:monospace; background:rgba(255,255,255,0.05); padding:4px 8px; border-radius:6px; color:var(--text-muted);">${n.address}</span></td>
                                     <td>
-                                        <span style="background: rgba(99,102,241,0.1); color: var(--primary); padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight:600;">
-                                            ${n.type.toUpperCase()}
-                                        </span>
+                                        <span style="font-family:monospace; background:rgba(255,255,255,0.05); padding:4px 8px; border-radius:6px; color:var(--text-muted); display:block; margin-bottom:4px;">${n.address}</span>
+                                        <span style="font-size:0.8rem; color:var(--primary);">Port: ${n.port || 443}</span>
+                                    </td>
+                                    <td>
+                                        <div style="display:flex; flex-direction:column; gap:4px;">
+                                            <span style="background: rgba(99,102,241,0.1); color: var(--primary); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight:600; width: fit-content;">
+                                                Type: ${n.type.toUpperCase()}
+                                            </span>
+                                            <span style="background: rgba(16,185,129,0.1); color: var(--success); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight:600; width: fit-content;">
+                                                Net: ${n.transport.toUpperCase()} / Sec: ${n.security.toUpperCase()}
+                                            </span>
+                                        </div>
                                     </td>
                                     <td>
                                         <span style="background: ${n.status === 'active' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)'}; color: ${n.status === 'active' ? 'var(--success)' : 'var(--danger)'}; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;">
@@ -459,7 +516,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     </td>
                                     <td>
                                         <div style="display:flex; gap:8px;">
-                                            <button onclick="copyText('${n.token}', 'Worker Token Copied to Clipboard!')" style="padding:8px 12px; background:var(--bg-card); color:var(--success); border:1px solid var(--success); font-size:0.85rem; border-radius:8px;">🔑 Get Token</button>
+                                            <button onclick="copyText('${n.token}', 'Worker Token Copied to Clipboard!')" style="padding:8px 12px; background:var(--bg-card); color:var(--success); border:1px solid var(--success); font-size:0.85rem; border-radius:8px;">🔑 Token</button>
                                             <button onclick="openNodeWizard('${n.id}')" style="padding:8px 12px; background:var(--bg-card); color:var(--primary); border:1px solid var(--primary); font-size:0.85rem; border-radius:8px;">⚙️</button>
                                             <button onclick="deleteNode('${n.id}')" class="btn-danger" style="padding:8px 12px; font-size:0.85rem; border-radius:8px;">🗑</button>
                                         </div>

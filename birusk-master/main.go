@@ -13,6 +13,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"strings"
@@ -34,18 +35,27 @@ type User struct {
 	ExpireTime    int64  `json:"expire_time"`
 	VlessEnabled  int    `json:"vless_enabled"`
 	TrojanEnabled int    `json:"trojan_enabled"`
+	VmessEnabled  int    `json:"vmess_enabled"`
 	CustomRemark  string `json:"custom_remark"`
 	UsedData      int64  `json:"used_data"`
 }
 
 type Node struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Type    string `json:"type"`
-	Address string `json:"address"`
-	CleanIP string `json:"clean_ip"`
-	Token   string `json:"token"`
-	Status  string `json:"status"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Type      string `json:"type"`
+	Address   string `json:"address"`
+	CleanIP   string `json:"clean_ip"`
+	Port      int    `json:"port"`
+	Transport string `json:"transport"`
+	Security  string `json:"security"`
+	Path      string `json:"path"`
+	Host      string `json:"host"`
+	Pbk       string `json:"pbk"`
+	Sid       string `json:"sid"`
+	Flow      string `json:"flow"`
+	Token     string `json:"token"`
+	Status    string `json:"status"`
 }
 
 type AppSettings struct {
@@ -56,6 +66,21 @@ type AppSettings struct {
 	MtprotoPort    string `json:"mtprotoPort"`
 	MtprotoSecret  string `json:"mtprotoSecret"`
 	MtprotoTag     string `json:"mtprotoTag"`
+}
+
+// ساختار استاندارد برای تولید کانفیگ VMess
+type VMessConfig struct {
+	V    string `json:"v"`
+	Ps   string `json:"ps"`
+	Add  string `json:"add"`
+	Port string `json:"port"`
+	Id   string `json:"id"`
+	Net  string `json:"net"`
+	Type string `json:"type"`
+	Host string `json:"host"`
+	Path string `json:"path"`
+	Tls  string `json:"tls"`
+	Sni  string `json:"sni"`
 }
 
 // --- متغیرهای سراسری سیستم ---
@@ -128,13 +153,13 @@ func main() {
 
 	mux.HandleFunc("GET /api/sync", handleNodeSync)
 	mux.HandleFunc("POST /api/usage", handleReportUsage)
-	mux.HandleFunc("GET /sub", handleSubscription)
+	mux.HandleFunc("GET /sub", handleSubscription) // قلب تولید کانفیگ‌ها
 
 	log.Printf("AlanCoreNet Master Engine running on port %s", port)
 	log.Fatal(http.ListenAndServe(":"+port, mux))
 }
 
-// --- موتور پراکسی و جابه‌جایی ترافیک VLESS ---
+// --- موتور پراکسی داخلی (VLESS Proxy) ---
 
 func handleProxy(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -242,7 +267,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// --- مدیریت تنظیمات و دانلود/اجرای پروکسی MTProto اسپانسری ---
+// --- مدیریت تنظیمات و پروکسی MTProto اسپانسری ---
 
 func loadSettingsFromDB() AppSettings {
 	var s AppSettings
@@ -381,10 +406,7 @@ func applyMtprotoEngine(s AppSettings) {
 		return
 	}
 
-	// اضافه شدن کلمه‌ی حیاتی "run" برای استارت شدن انجین
 	args := []string{"run", "-b", "0.0.0.0:" + s.MtprotoPort}
-	
-	// تبدیل خودکار سکرت ۳۲ حرفی به FakeTLS (جلوگیری از فیلترینگ با سایت google.com)
 	secretToPass := s.MtprotoSecret
 	if len(secretToPass) == 32 {
 		fakeDomainHex := hex.EncodeToString([]byte("google.com"))
@@ -409,7 +431,7 @@ func applyMtprotoEngine(s AppSettings) {
 // --- مدیریت کاربران (API) ---
 
 func handleGetUsers(w http.ResponseWriter, r *http.Request) {
-	rows, err := DB.Query("SELECT id, name, status, data_limit, expire_time, vless_enabled, trojan_enabled, custom_remark FROM users")
+	rows, err := DB.Query("SELECT id, name, status, data_limit, expire_time, vless_enabled, trojan_enabled, vmess_enabled, custom_remark FROM users")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -419,7 +441,7 @@ func handleGetUsers(w http.ResponseWriter, r *http.Request) {
 	var userList []User
 	for rows.Next() {
 		var u User
-		rows.Scan(&u.ID, &u.Name, &u.Status, &u.DataLimit, &u.ExpireTime, &u.VlessEnabled, &u.TrojanEnabled, &u.CustomRemark)
+		rows.Scan(&u.ID, &u.Name, &u.Status, &u.DataLimit, &u.ExpireTime, &u.VlessEnabled, &u.TrojanEnabled, &u.VmessEnabled, &u.CustomRemark)
 		usage, _ := GetTotalUsage(u.ID)
 		u.UsedData = usage
 		userList = append(userList, u)
@@ -440,6 +462,7 @@ func handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		ExpireTime    int64  `json:"expire_time"`
 		VlessEnabled  bool   `json:"vless_enabled"`
 		TrojanEnabled bool   `json:"trojan_enabled"`
+		VmessEnabled  bool   `json:"vmess_enabled"`
 		CustomRemark  string `json:"custom_remark"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -447,18 +470,14 @@ func handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vlessVal := 1
-	if !req.VlessEnabled {
-		vlessVal = 0
-	}
-	trojanVal := 1
-	if !req.TrojanEnabled {
-		trojanVal = 0
-	}
+	vlessVal, trojanVal, vmessVal := 0, 0, 0
+	if req.VlessEnabled { vlessVal = 1 }
+	if req.TrojanEnabled { trojanVal = 1 }
+	if req.VmessEnabled { vmessVal = 1 }
 
 	newID := uuid.New().String()
-	_, err := DB.Exec("INSERT INTO users (id, name, data_limit, expire_time, vless_enabled, trojan_enabled, custom_remark) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		newID, req.Name, req.DataLimit, req.ExpireTime, vlessVal, trojanVal, req.CustomRemark)
+	_, err := DB.Exec("INSERT INTO users (id, name, data_limit, expire_time, vless_enabled, trojan_enabled, vmess_enabled, custom_remark) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		newID, req.Name, req.DataLimit, req.ExpireTime, vlessVal, trojanVal, vmessVal, req.CustomRemark)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -469,18 +488,8 @@ func handleCreateUser(w http.ResponseWriter, r *http.Request) {
 
 func handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
-	_, err := DB.Exec("DELETE FROM node_usage WHERE user_id = ?", id)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	_, err = DB.Exec("DELETE FROM users WHERE id = ?", id)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
+	DB.Exec("DELETE FROM node_usage WHERE user_id = ?", id)
+	DB.Exec("DELETE FROM users WHERE id = ?", id)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -492,6 +501,7 @@ func handleEditUser(w http.ResponseWriter, r *http.Request) {
 		ExpireTime    int64  `json:"expire_time"`
 		VlessEnabled  bool   `json:"vless_enabled"`
 		TrojanEnabled bool   `json:"trojan_enabled"`
+		VmessEnabled  bool   `json:"vmess_enabled"`
 		CustomRemark  string `json:"custom_remark"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -499,17 +509,13 @@ func handleEditUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	vlessVal := 1
-	if !req.VlessEnabled {
-		vlessVal = 0
-	}
-	trojanVal := 1
-	if !req.TrojanEnabled {
-		trojanVal = 0
-	}
+	vlessVal, trojanVal, vmessVal := 0, 0, 0
+	if req.VlessEnabled { vlessVal = 1 }
+	if req.TrojanEnabled { trojanVal = 1 }
+	if req.VmessEnabled { vmessVal = 1 }
 
-	_, err := DB.Exec("UPDATE users SET name = ?, data_limit = ?, expire_time = ?, vless_enabled = ?, trojan_enabled = ?, custom_remark = ? WHERE id = ?",
-		req.Name, req.DataLimit, req.ExpireTime, vlessVal, trojanVal, req.CustomRemark, req.ID)
+	_, err := DB.Exec("UPDATE users SET name = ?, data_limit = ?, expire_time = ?, vless_enabled = ?, trojan_enabled = ?, vmess_enabled = ?, custom_remark = ? WHERE id = ?",
+		req.Name, req.DataLimit, req.ExpireTime, vlessVal, trojanVal, vmessVal, req.CustomRemark, req.ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -521,7 +527,7 @@ func handleEditUser(w http.ResponseWriter, r *http.Request) {
 // --- مدیریت نودها (API) ---
 
 func handleGetNodes(w http.ResponseWriter, r *http.Request) {
-	rows, err := DB.Query("SELECT id, name, type, address, clean_ip, token, status FROM nodes")
+	rows, err := DB.Query("SELECT id, name, type, address, clean_ip, port, transport, security, path, host, pbk, sid, flow, token, status FROM nodes")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -531,7 +537,7 @@ func handleGetNodes(w http.ResponseWriter, r *http.Request) {
 	var nodeList []Node
 	for rows.Next() {
 		var n Node
-		rows.Scan(&n.ID, &n.Name, &n.Type, &n.Address, &n.CleanIP, &n.Token, &n.Status)
+		rows.Scan(&n.ID, &n.Name, &n.Type, &n.Address, &n.CleanIP, &n.Port, &n.Transport, &n.Security, &n.Path, &n.Host, &n.Pbk, &n.Sid, &n.Flow, &n.Token, &n.Status)
 		nodeList = append(nodeList, n)
 	}
 
@@ -544,8 +550,8 @@ func handleGetNodes(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleCreateNode(w http.ResponseWriter, r *http.Request) {
-	var req Node
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var n Node
+	if err := json.NewDecoder(r.Body).Decode(&n); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -553,7 +559,11 @@ func handleCreateNode(w http.ResponseWriter, r *http.Request) {
 	newID := uuid.New().String()
 	token := generateToken()
 
-	_, err := DB.Exec("INSERT INTO nodes (id, name, type, address, clean_ip, token) VALUES (?, ?, ?, ?, ?, ?)", newID, req.Name, req.Type, req.Address, req.CleanIP, token)
+	_, err := DB.Exec(`INSERT INTO nodes 
+		(id, name, type, address, clean_ip, port, transport, security, path, host, pbk, sid, flow, token) 
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, 
+		newID, n.Name, n.Type, n.Address, n.CleanIP, n.Port, n.Transport, n.Security, n.Path, n.Host, n.Pbk, n.Sid, n.Flow, token)
+	
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -564,29 +574,23 @@ func handleCreateNode(w http.ResponseWriter, r *http.Request) {
 
 func handleDeleteNode(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
-	_, err := DB.Exec("DELETE FROM node_usage WHERE node_id = ?", id)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	_, err = DB.Exec("DELETE FROM nodes WHERE id = ?", id)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
+	DB.Exec("DELETE FROM node_usage WHERE node_id = ?", id)
+	DB.Exec("DELETE FROM nodes WHERE id = ?", id)
 	w.WriteHeader(http.StatusOK)
 }
 
 func handleEditNode(w http.ResponseWriter, r *http.Request) {
-	var req Node
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var n Node
+	if err := json.NewDecoder(r.Body).Decode(&n); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	_, err := DB.Exec("UPDATE nodes SET name = ?, address = ?, clean_ip = ? WHERE id = ?", req.Name, req.Address, req.CleanIP, req.ID)
+	_, err := DB.Exec(`UPDATE nodes SET 
+		name = ?, address = ?, clean_ip = ?, port = ?, transport = ?, security = ?, path = ?, host = ?, pbk = ?, sid = ?, flow = ? 
+		WHERE id = ?`, 
+		n.Name, n.Address, n.CleanIP, n.Port, n.Transport, n.Security, n.Path, n.Host, n.Pbk, n.Sid, n.Flow, n.ID)
+	
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -595,7 +599,7 @@ func handleEditNode(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// --- همگام‌سازی، آمار و موتور ساخت سابسکریپشن ---
+// --- همگام‌سازی، آمار و موتور ساخت پیشرفته سابسکریپشن ---
 
 func handleNodeSync(w http.ResponseWriter, r *http.Request) {
 	authHeader := r.Header.Get("Authorization")
@@ -670,6 +674,7 @@ func handleReportUsage(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// موتور قدرتمند تولید کانفیگ (Xray Generator Engine)
 func handleSubscription(w http.ResponseWriter, r *http.Request) {
 	userID := r.URL.Query().Get("id")
 	if userID == "" {
@@ -677,12 +682,11 @@ func handleSubscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var status string
+	var status, customRemark string
 	var expireTime int64
-	var vlessEnabled, trojanEnabled int
-	var customRemark string
+	var vlessEnabled, trojanEnabled, vmessEnabled int
 
-	err := DB.QueryRow("SELECT status, expire_time, vless_enabled, trojan_enabled, custom_remark FROM users WHERE id = ?", userID).Scan(&status, &expireTime, &vlessEnabled, &trojanEnabled, &customRemark)
+	err := DB.QueryRow("SELECT status, expire_time, vless_enabled, trojan_enabled, vmess_enabled, custom_remark FROM users WHERE id = ?", userID).Scan(&status, &expireTime, &vlessEnabled, &trojanEnabled, &vmessEnabled, &customRemark)
 	if err != nil || status != "active" {
 		http.Error(w, "User is inactive or not found", http.StatusNotFound)
 		return
@@ -694,7 +698,7 @@ func handleSubscription(w http.ResponseWriter, r *http.Request) {
 
 	settings := loadSettingsFromDB()
 
-	rows, err := DB.Query("SELECT name, type, address, clean_ip FROM nodes WHERE status = 'active'")
+	rows, err := DB.Query("SELECT name, type, address, clean_ip, port, transport, security, path, host, pbk, sid, flow FROM nodes WHERE status = 'active'")
 	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
@@ -704,37 +708,89 @@ func handleSubscription(w http.ResponseWriter, r *http.Request) {
 	var configs []string
 
 	for rows.Next() {
-		var nName, nType, nAddr, nCleanIP string
-		rows.Scan(&nName, &nType, &nAddr, &nCleanIP)
+		var n Node
+		rows.Scan(&n.Name, &n.Type, &n.Address, &n.CleanIP, &n.Port, &n.Transport, &n.Security, &n.Path, &n.Host, &n.Pbk, &n.Sid, &n.Flow)
 
-		safeAddr := cleanDomain(nAddr)
+		safeAddr := cleanDomain(n.Address)
 		targetIP := safeAddr
 
-		if nCleanIP != "" {
-			targetIP = cleanDomain(nCleanIP)
+		// تعیین IP نهایی (Clean IP یا آدرس اصلی)
+		if n.CleanIP != "" {
+			targetIP = cleanDomain(n.CleanIP)
 		} else if settings.DefaultCleanIp != "" {
 			targetIP = cleanDomain(settings.DefaultCleanIp)
 		}
 
-		remarkName := nName
+		// تعیین نام کانفیگ
+		remarkName := n.Name
 		if strings.TrimSpace(customRemark) != "" {
 			remarkName = strings.TrimSpace(customRemark)
 		}
 
-		if nType == "cloudflare" {
-			if vlessEnabled == 1 {
-				vless := fmt.Sprintf("vless://%s@%s:443?encryption=none&security=tls&sni=%s&type=ws&host=%s&path=/?ed=2048#%s-VLESS", userID, targetIP, safeAddr, safeAddr, remarkName)
-				configs = append(configs, vless)
+		// --- ساخت پارامترهای مشترک (Query Params) ---
+		q := url.Values{}
+		q.Add("type", n.Transport)
+		q.Add("security", n.Security)
+
+		// تنظیمات بر اساس ترنسپورت
+		if n.Transport == "ws" {
+			q.Add("path", n.Path)
+			if n.Host != "" { q.Add("host", n.Host) } else { q.Add("host", safeAddr) }
+		} else if n.Transport == "grpc" {
+			q.Add("serviceName", n.Path)
+			q.Add("mode", "multi")
+		}
+
+		// تنظیمات بر اساس امنیت
+		if n.Security == "tls" {
+			if n.Host != "" { q.Add("sni", n.Host) } else { q.Add("sni", safeAddr) }
+		} else if n.Security == "reality" {
+			if n.Host != "" { q.Add("sni", n.Host) } else { q.Add("sni", safeAddr) }
+			q.Add("pbk", n.Pbk)
+			q.Add("sid", n.Sid)
+			q.Add("fp", "chrome") // استاندارد ضد فیلترینگ
+			if n.Flow != "" { q.Add("flow", n.Flow) }
+		}
+
+		queryString := q.Encode()
+
+		// --- تولید کانفیگ‌ها بر اساس انتخاب کاربر ---
+		
+		// 1. VLESS
+		if vlessEnabled == 1 {
+			vlessUrl := fmt.Sprintf("vless://%s@%s:%d?%s#%s-VLESS", userID, targetIP, n.Port, queryString, url.PathEscape(remarkName))
+			configs = append(configs, vlessUrl)
+		}
+		
+		// 2. Trojan
+		if trojanEnabled == 1 {
+			trojanUrl := fmt.Sprintf("trojan://%s@%s:%d?%s#%s-Trojan", userID, targetIP, n.Port, queryString, url.PathEscape(remarkName))
+			configs = append(configs, trojanUrl)
+		}
+
+		// 3. VMess (تولید JSON استاندارد)
+		if vmessEnabled == 1 {
+			sniVal := safeAddr
+			if n.Host != "" { sniVal = n.Host }
+			
+			vmessObj := VMessConfig{
+				V:    "2",
+				Ps:   remarkName + "-VMess",
+				Add:  targetIP,
+				Port: fmt.Sprint(n.Port),
+				Id:   userID,
+				Net:  n.Transport,
+				Type: "none",
+				Host: sniVal,
+				Path: n.Path,
+				Tls:  n.Security,
+				Sni:  sniVal,
 			}
-			if trojanEnabled == 1 {
-				trojan := fmt.Sprintf("trojan://%s@%s:443?security=tls&sni=%s&type=ws&host=%s&path=/?ed=2048#%s-Trojan", userID, targetIP, safeAddr, safeAddr, remarkName)
-				configs = append(configs, trojan)
-			}
-		} else if nType == "railway" {
-			if vlessEnabled == 1 {
-				vless := fmt.Sprintf("vless://%s@%s:443?encryption=none&security=tls&sni=%s&type=ws&host=%s&path=/#%s-Master", userID, targetIP, safeAddr, safeAddr, remarkName)
-				configs = append(configs, vless)
-			}
+			
+			// تبدیل استراکت به JSON و سپس Base64
+			vmessJson, _ := json.Marshal(vmessObj)
+			vmessBase64 := base64.StdEncoding.EncodeToString(vmessJson)
+			configs = append(configs, "vmess://"+vmessBase64)
 		}
 	}
 
