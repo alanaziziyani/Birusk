@@ -1,92 +1,111 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AlanCoreNet Master Panel</title>
+    <title>Birusk Panel</title>
     <style>
-        /* --- متغیرهای رنگی و استایل‌های پایه --- */
+        /* --- Birusk / Marzban Inspired Minimalist Theme --- */
         :root {
-            --primary: #6366f1;
-            --primary-hover: #4f46e5;
-            --bg-base: #0f172a;
-            --bg-card: #1e293b;
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --border: #334155;
+            --primary: #3b82f6; /* Marzban Blue */
+            --primary-hover: #2563eb;
+            --primary-light: #eff6ff;
+            --bg-body: #f3f4f6;
+            --bg-surface: #ffffff;
+            --text-main: #1f2937;
+            --text-muted: #6b7280;
+            --border: #e5e7eb;
             --success: #10b981;
-            --danger: #f43f5e;
-            --telegram: #2eaadc;
+            --danger: #ef4444;
+            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
         }
-        [data-theme="light"] {
-            --bg-base: #f1f5f9;
-            --bg-card: #ffffff;
-            --text-main: #0f172a;
-            --text-muted: #64748b;
-            --border: #e2e8f0;
+        
+        [data-theme="dark"] {
+            --primary: #3b82f6;
+            --primary-hover: #60a5fa;
+            --primary-light: rgba(59, 130, 246, 0.15);
+            --bg-body: #111827;
+            --bg-surface: #1f2937;
+            --text-main: #f9fafb;
+            --text-muted: #9ca3af;
+            --border: #374151;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { background-color: var(--bg-base); color: var(--text-main); display: flex; min-height: 100vh; overflow-x: hidden; transition: background 0.3s, color 0.3s; }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        body { background-color: var(--bg-body); color: var(--text-main); display: flex; min-height: 100vh; overflow-x: hidden; transition: background-color 0.2s; }
         
-        /* --- منوی کناری (Sidebar) --- */
-        .sidebar { width: 260px; background-color: var(--bg-card); border-right: 1px solid var(--border); display: flex; flex-direction: column; transition: transform 0.3s; z-index: 100; }
-        .sidebar-header { padding: 24px; font-size: 1.5rem; font-weight: bold; color: var(--primary); text-align: center; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: center; gap: 10px; }
-        .nav-menu { flex: 1; padding: 20px 0; display: flex; flex-direction: column; gap: 8px; }
-        .nav-item { padding: 12px 24px; color: var(--text-muted); text-decoration: none; display: flex; align-items: center; gap: 12px; font-weight: 500; transition: all 0.2s; cursor: pointer; }
-        .nav-item:hover, .nav-item.active { background: rgba(99, 102, 241, 0.1); color: var(--primary); border-left: 4px solid var(--primary); }
+        /* --- Sidebar --- */
+        .sidebar { width: 260px; background-color: var(--bg-surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; transition: transform 0.3s; z-index: 100; }
+        .sidebar-header { padding: 24px; font-size: 1.5rem; font-weight: 700; color: var(--primary); display: flex; align-items: center; gap: 12px; justify-content: center; border-bottom: 1px solid var(--border); }
+        .nav-menu { flex: 1; padding: 20px 12px; display: flex; flex-direction: column; gap: 4px; }
+        .nav-item { padding: 12px 16px; color: var(--text-muted); text-decoration: none; display: flex; align-items: center; gap: 12px; font-weight: 500; border-radius: 8px; transition: all 0.2s; cursor: pointer; }
+        .nav-item:hover { background-color: var(--bg-body); color: var(--text-main); }
+        .nav-item.active { background-color: var(--primary-light); color: var(--primary); }
+        .nav-icon { width: 20px; height: 20px; }
         
-        /* --- محتوای اصلی (Main Content) --- */
+        /* --- Main Content --- */
         .main-content { flex: 1; display: flex; flex-direction: column; height: 100vh; overflow-y: auto; }
-        .topbar { background-color: var(--bg-card); border-bottom: 1px solid var(--border); padding: 16px 32px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 50; }
+        .topbar { background-color: var(--bg-surface); border-bottom: 1px solid var(--border); padding: 16px 32px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 50; }
         .topbar-right { display: flex; align-items: center; gap: 16px; }
         .content-area { padding: 32px; max-width: 1200px; margin: 0 auto; width: 100%; }
         
-        /* --- المان‌های رابط کاربری (UI Elements) --- */
-        .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 24px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-        .grid-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 24px; }
-        .card-title { font-size: 0.9rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 8px; }
-        .card-value { font-size: 2rem; font-weight: bold; color: var(--text-main); }
+        /* --- Cards & UI Elements --- */
+        .card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 24px; box-shadow: var(--shadow); }
+        .grid-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }
         
-        /* --- فرم‌ها و ورودی‌ها (Forms) --- */
-        .form-group { margin-bottom: 16px; display: flex; flex-direction: column; flex: 1;}
+        /* --- Forms & Inputs --- */
+        .form-group { margin-bottom: 20px; display: flex; flex-direction: column; flex: 1;}
         .form-row { display: flex; gap: 16px; }
-        input[type="text"], input[type="number"], select { width: 100%; padding: 12px; background: var(--bg-base); border: 1px solid var(--border); border-radius: 8px; color: var(--text-main); outline: none; transition: border 0.2s; }
-        input:focus, select:focus { border-color: var(--primary); }
+        label { font-size: 0.9rem; font-weight: 600; margin-bottom: 8px; color: var(--text-main); }
+        input[type="text"], input[type="number"], select { width: 100%; padding: 10px 14px; background: var(--bg-body); border: 1px solid var(--border); border-radius: 8px; color: var(--text-main); outline: none; transition: all 0.2s; font-size: 0.95rem; }
+        input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); background: var(--bg-surface); }
         
-        /* --- دکمه‌ها (Buttons) --- */
-        button { background: var(--primary); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
-        button:hover { opacity: 0.9; }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-secondary { background: transparent; border: 1px solid var(--border); color: var(--text-main); }
-        .btn-danger { background: rgba(244, 63, 94, 0.1); color: var(--danger); border: 1px solid transparent; }
-        .btn-telegram { background: rgba(46, 170, 220, 0.1); color: var(--telegram); border: 1px solid var(--telegram); }
+        /* --- Buttons --- */
+        button { background: var(--primary); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 500; cursor: pointer; transition: background-color 0.2s; display: inline-flex; align-items: center; gap: 8px; justify-content: center; font-size: 0.95rem; }
+        button:hover { background: var(--primary-hover); }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-secondary { background: var(--bg-body); border: 1px solid var(--border); color: var(--text-main); }
+        .btn-secondary:hover { background: var(--border); }
+        .btn-icon { padding: 8px; background: var(--bg-body); color: var(--text-muted); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+        .btn-icon:hover { color: var(--text-main); background: var(--border); }
+        .btn-danger { background: rgba(239, 68, 68, 0.1); color: var(--danger); }
+        .btn-danger:hover { background: rgba(239, 68, 68, 0.2); }
         
-        /* --- جداول (Tables) --- */
+        /* --- Minimal Tables (Marzban Style) --- */
         table { width: 100%; border-collapse: collapse; text-align: left; }
-        th, td { padding: 16px; border-bottom: 1px solid var(--border); }
-        th { color: var(--text-muted); font-size: 0.85rem; text-transform: uppercase; font-weight: 600; }
+        th { color: var(--text-muted); font-size: 0.85rem; font-weight: 500; padding: 16px 12px; border-bottom: 1px solid var(--border); }
+        td { padding: 16px 12px; border-bottom: 1px solid var(--border); color: var(--text-main); font-size: 0.95rem; }
+        tr:last-child td { border-bottom: none; }
         
-        /* --- نوارهای بصری (Visual Bars) --- */
-        .visual-bar-container { width: 100%; background: var(--bg-base); border-radius: 4px; height: 8px; overflow: hidden; border: 1px solid var(--border); }
-        .visual-bar { height: 100%; background: var(--primary); transition: width 0.3s; }
+        /* --- Status Dots --- */
+        .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; flex-shrink: 0; }
+        .status-active { background-color: var(--success); box-shadow: 0 0 8px rgba(16,185,129,0.4); }
+        .status-expired { background-color: var(--text-muted); }
+        .status-offline { background-color: var(--danger); }
         
-        /* --- سوییچ‌ها (Switches) --- */
-        .switch-group { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; }
-        .switch { position: relative; display: inline-block; width: 50px; height: 24px; }
+        /* --- Checkboxes & Switches --- */
+        .checkbox-group { display: flex; gap: 20px; margin-top: 8px; padding: 14px; background: var(--bg-body); border-radius: 8px; border: 1px solid var(--border); }
+        .checkbox-label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.95rem; font-weight: 500; }
+        input[type="checkbox"].styled-checkbox { width: 18px; height: 18px; cursor: pointer; accent-color: var(--primary); }
+        
+        .switch-group { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--border); }
+        .switch-group:last-child { border-bottom: none; }
+        .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
         .switch input { opacity: 0; width: 0; height: 0; }
-        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--border); transition: .4s; border-radius: 24px; }
-        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--border); transition: .3s; border-radius: 24px; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; }
         input:checked + .slider { background-color: var(--primary); }
-        input:checked + .slider:before { transform: translateX(26px); }
+        input:checked + .slider:before { transform: translateX(20px); }
         
-        /* --- مۆدال‌ها (Modals / Popups) --- */
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; backdrop-filter: blur(4px); }
+        /* --- Modals --- */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 1000; justify-content: center; align-items: center; backdrop-filter: blur(2px); }
         .modal.open { display: flex; }
-        .modal-content { background: var(--bg-card); width: 90%; max-width: 500px; padding: 24px; border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 10px 25px rgba(0,0,0,0.5); max-height: 90vh; overflow-y: auto; }
-        .modal-content h3 { margin-bottom: 20px; color: var(--text-main); font-size: 1.25rem; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+        .modal-content { background: var(--bg-surface); width: 90%; max-width: 500px; padding: 28px; border-radius: 16px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04); max-height: 90vh; overflow-y: auto; }
+        .modal-header { margin-bottom: 24px; color: var(--text-main); font-size: 1.25rem; font-weight: 700; display: flex; justify-content: space-between; align-items: center; }
         
-        /* --- طراحی واکنش‌گرا (Mobile Responsive) --- */
-        #mobile-menu-btn { display: none; background: none; color: var(--text-main); font-size: 1.5rem; padding: 0; }
+        /* --- Mobile --- */
+        #mobile-menu-btn { display: none; background: none; color: var(--text-main); padding: 4px; border: none; }
         .overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 90; opacity: 0; transition: opacity 0.3s; }
         
         @media (max-width: 768px) {
@@ -95,205 +114,241 @@
             #mobile-menu-btn { display: block; }
             .form-row { flex-direction: column; gap: 0; }
             .content-area { padding: 16px; }
+            table thead { display: none; }
+            table tr { display: block; margin-bottom: 16px; border: 1px solid var(--border); border-radius: 12px; padding: 12px; background: var(--bg-surface); }
+            table td { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding: 12px 0; }
+            table td:last-child { border-bottom: none; justify-content: flex-end; }
+            table td::before { content: attr(data-label); font-weight: 500; color: var(--text-muted); }
         }
     </style>
 </head>
 <body>
 
-    <!-- === سایدبار (منوی سمت چپ) === -->
     <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
-            🐯 AlanCoreNet
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+            Birusk
         </div>
         <nav class="nav-menu">
             <a href="#" class="nav-item active" data-page="dashboard">
-                <span style="font-size: 1.2rem;">📊</span> <span data-i18n="nav_dashboard">Dashboard</span>
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
+                <span data-i18n="nav_dashboard">Dashboard</span>
             </a>
             <a href="#" class="nav-item" data-page="users">
-                <span style="font-size: 1.2rem;">👥</span> <span data-i18n="nav_users">Subscriptions</span>
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                <span data-i18n="nav_users">Subscriptions</span>
             </a>
             <a href="#" class="nav-item" data-page="nodes">
-                <span style="font-size: 1.2rem;">🌍</span> <span data-i18n="nav_nodes">Edge Nodes</span>
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                <span data-i18n="nav_nodes">Nodes</span>
             </a>
             <a href="#" class="nav-item" data-page="settings">
-                <span style="font-size: 1.2rem;">⚙️</span> <span data-i18n="nav_settings">Core Settings</span>
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                <span data-i18n="nav_settings">Settings</span>
             </a>
         </nav>
     </aside>
 
-    <!-- === محتوای اصلی (پنل سمت راست) === -->
     <main class="main-content">
         <header class="topbar">
             <div style="display: flex; align-items: center; gap: 16px;">
-                <button id="mobile-menu-btn">☰</button>
-                <h2 id="page-title" data-i18n="nav_dashboard" style="font-size: 1.25rem;">Dashboard</h2>
+                <button id="mobile-menu-btn">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+                </button>
+                <h2 id="page-title" data-i18n="nav_dashboard" style="font-size: 1.25rem; font-weight: 600;">Dashboard</h2>
             </div>
             <div class="topbar-right">
-                <select id="lang-selector" style="padding: 6px 12px; width: auto; background: var(--bg-base);">
+                <select id="lang-selector" style="padding: 6px 12px; width: auto; background: var(--bg-body); border-radius: 20px; font-weight: 500;">
                     <option value="en">English</option>
                     <option value="fa">فارسی</option>
                 </select>
-                <button id="theme-toggle" class="btn-secondary" style="padding: 8px; border-radius: 50%;">🌓</button>
+                <button id="theme-toggle" class="btn-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                </button>
             </div>
         </header>
         
         <div class="content-area" id="content">
-            <!-- محتوای صفحات به صورت داینامیک توسط app.js در اینجا لود می‌شود -->
+            <!-- Injected by app.js -->
         </div>
     </main>
 
-    <!-- === فرم مدیریت اشتراک‌ها (User Modal) === -->
+    <!-- === User Modal === -->
     <div id="user-modal" class="modal">
         <div class="modal-content">
-            <h3 id="user-modal-title">Create Subscription</h3>
+            <div class="modal-header">
+                <span id="user-modal-title">Subscription</span>
+                <button class="btn-icon" onclick="closeModal('user-modal')" style="border:none; padding:4px;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
             <input type="hidden" id="form-user-id">
             
             <div class="form-group">
-                <label style="font-weight:bold; margin-bottom:8px;">Name / Identifier</label>
-                <input type="text" id="form-user-name" placeholder="e.g. Alan_VIP">
+                <label>Name</label>
+                <input type="text" id="form-user-name" placeholder="e.g. MahsaNG">
             </div>
             
             <div class="form-row">
                 <div class="form-group">
-                    <label style="font-weight:bold; margin-bottom:8px;">Data Limit (GB) - 0 for Unl</label>
+                    <label>Data Limit (GB) - 0 for Unl</label>
                     <input type="number" id="form-user-limit" value="0">
                 </div>
                 <div class="form-group">
-                    <label style="font-weight:bold; margin-bottom:8px;">Validity (Days) - 0 for Unl</label>
+                    <label>Validity (Days) - 0 for Unl</label>
                     <input type="number" id="form-user-days" value="30">
                 </div>
             </div>
             
-            <div class="form-group" style="margin-top: 10px;">
-                <label style="font-weight:bold; margin-bottom:8px;">Enabled Protocols</label>
-                <div style="display:flex; gap:16px; margin-top:8px; background: var(--bg-base); padding: 12px; border-radius: 8px; border: 1px solid var(--border);">
-                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" id="form-user-vless" checked> VLESS</label>
-                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" id="form-user-trojan" checked> Trojan</label>
-                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" id="form-user-vmess" checked> VMess</label>
+            <div class="form-group">
+                <label>Protocols</label>
+                <div class="checkbox-group">
+                    <label class="checkbox-label"><input type="checkbox" class="styled-checkbox" id="form-user-vless" checked> VLESS</label>
+                    <label class="checkbox-label"><input type="checkbox" class="styled-checkbox" id="form-user-trojan" checked> Trojan</label>
+                    <label class="checkbox-label"><input type="checkbox" class="styled-checkbox" id="form-user-vmess" checked> VMess</label>
                 </div>
             </div>
             
-            <div class="form-group" style="margin-top: 10px;">
-                <label style="font-weight:bold; margin-bottom:8px;">Custom Remark (Optional)</label>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label>Note (Optional)</label>
                 <input type="text" id="form-user-remark" placeholder="e.g. VIP-Server">
             </div>
             
-            <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:24px;">
+            <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:32px;">
                 <button class="btn-secondary" onclick="closeModal('user-modal')">Cancel</button>
-                <button id="btn-save-user" onclick="submitUserForm()">Save & Deploy</button>
+                <button id="btn-save-user" onclick="submitUserForm()">Save</button>
             </div>
         </div>
     </div>
 
-    <!-- === فرم مدیریت نودها (Node Modal) === -->
+    <!-- === Node Modal === -->
     <div id="node-modal" class="modal">
         <div class="modal-content" style="max-width: 650px;">
-            <h3 id="node-modal-title">Register Edge Node</h3>
+            <div class="modal-header">
+                <span id="node-modal-title">Node</span>
+                <button class="btn-icon" onclick="closeModal('node-modal')" style="border:none; padding:4px;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+            </div>
             <input type="hidden" id="form-node-id">
             
             <div class="form-row">
                 <div class="form-group">
-                    <label style="font-weight:bold; margin-bottom:8px;">Node Name</label>
+                    <label>Node Name</label>
                     <input type="text" id="form-node-name" placeholder="e.g. Germany-1">
                 </div>
                 <div class="form-group">
-                    <label style="font-weight:bold; margin-bottom:8px;">Node Type</label>
+                    <label>Node Type</label>
                     <select id="form-node-type">
-                        <option value="cloudflare">Cloudflare (CDN Worker)</option>
-                        <option value="railway">Railway / Direct Server</option>
+                        <option value="cloudflare">Cloudflare (CDN)</option>
+                        <option value="railway">Direct Server</option>
                     </select>
                 </div>
             </div>
             
             <div class="form-row">
                 <div class="form-group">
-                    <label style="font-weight:bold; margin-bottom:8px;">Target Address (IP/Domain)</label>
+                    <label>Address (IP/Domain)</label>
                     <input type="text" id="form-node-addr" placeholder="e.g. proxy.domain.com">
                 </div>
-                <div class="form-group" style="max-width: 150px;">
-                    <label style="font-weight:bold; margin-bottom:8px;">Node Port</label>
+                <div class="form-group" style="max-width: 120px;">
+                    <label>Port</label>
                     <input type="number" id="form-node-port" value="443">
                 </div>
             </div>
 
             <div class="form-row">
                 <div class="form-group">
-                    <label style="font-weight:bold; margin-bottom:8px;">Network Transport</label>
+                    <label>Transport</label>
                     <select id="form-node-transport" onchange="toggleNodeFields()">
                         <option value="ws">WebSocket (WS)</option>
+                        <option value="xhttp">XHTTP / Upgrade</option>
+                        <option value="splithttp">SplitHTTP</option>
                         <option value="grpc">gRPC</option>
                         <option value="tcp">TCP (Raw)</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label style="font-weight:bold; margin-bottom:8px;">Security / TLS</label>
+                    <label>Security</label>
                     <select id="form-node-security" onchange="toggleNodeFields()">
-                        <option value="tls">Standard TLS</option>
-                        <option value="reality">REALITY (Anti-DPI)</option>
-                        <option value="none">None (Plain)</option>
+                        <option value="tls">TLS</option>
+                        <option value="reality">REALITY</option>
+                        <option value="none">None</option>
                     </select>
                 </div>
             </div>
 
-            <!-- فیلدهای پیشرفته (REALITY / gRPC) که به صورت داینامیک با جاوااسکریپت نمایان می‌شوند -->
-            <div id="advanced-fields" style="background: rgba(99,102,241,0.05); padding: 16px; border-radius: 8px; border: 1px dashed var(--primary); margin-top: 12px;">
+            <div id="advanced-fields" style="background: var(--bg-body); padding: 20px; border-radius: 12px; margin-top: 8px;">
                 <div class="form-row">
                     <div class="form-group" id="group-path">
-                        <label style="font-weight:bold; margin-bottom:8px;" id="label-path">Path / ServiceName</label>
+                        <label id="label-path">Path</label>
                         <input type="text" id="form-node-path" value="/">
                     </div>
                     <div class="form-group" id="group-host">
-                        <label style="font-weight:bold; margin-bottom:8px;">Host / SNI</label>
+                        <label>Host / SNI</label>
                         <input type="text" id="form-node-host" placeholder="e.g. speedtest.net">
                     </div>
                 </div>
-                <div class="form-row" id="group-reality" style="display: none;">
+                
+                <div class="form-group" id="group-fingerprint">
+                    <label>uTLS Fingerprint</label>
+                    <select id="form-node-fingerprint">
+                        <option value="chrome">Chrome</option>
+                        <option value="firefox">Firefox</option>
+                        <option value="safari">Safari</option>
+                        <option value="ios">iOS</option>
+                        <option value="random">Randomized</option>
+                    </select>
+                </div>
+
+                <div class="form-row" id="group-reality" style="display: none; border-top: 1px solid var(--border); padding-top: 16px; margin-top: 8px;">
                     <div class="form-group">
-                        <label style="font-weight:bold; margin-bottom:8px;">Public Key (PBK)</label>
-                        <input type="text" id="form-node-pbk" placeholder="REALITY Public Key">
+                        <label>Public Key (PBK)</label>
+                        <input type="text" id="form-node-pbk" placeholder="Base64 Key">
                     </div>
                     <div class="form-group">
-                        <label style="font-weight:bold; margin-bottom:8px;">Short ID (SID)</label>
+                        <label>Short ID (SID)</label>
                         <input type="text" id="form-node-sid" placeholder="e.g. 1a2b3c4d">
                     </div>
                 </div>
             </div>
             
-            <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:24px;">
+            <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:32px;">
                 <button class="btn-secondary" onclick="closeModal('node-modal')">Cancel</button>
-                <button id="btn-save-node" onclick="submitNodeForm()">Connect Node</button>
+                <button id="btn-save-node" onclick="submitNodeForm()">Save Node</button>
             </div>
         </div>
     </div>
 
-    <!-- === اسکریپت‌های سیستمی و زبان === -->
     <script>
         const translations = {
             "en": {
                 "nav_dashboard": "Dashboard",
-                "nav_users": "Subscriptions",
-                "nav_nodes": "Edge Nodes",
-                "nav_settings": "Core Settings",
-                "card_total_users": "Total Subscriptions",
-                "card_active_nodes": "Online Edge Nodes",
-                "table_name": "Client Identifier",
-                "table_usage": "Data Utilization",
+                "nav_users": "Users",
+                "nav_nodes": "Nodes",
+                "nav_settings": "Settings",
+                "card_total_users": "Total Users",
+                "card_active_nodes": "Active Nodes",
+                "table_name": "Username",
+                "table_usage": "Data Usage",
                 "table_status": "Status",
-                "btn_add_user": "+ Create Client Sub",
-                "btn_add_node": "+ Register Edge Node"
+                "table_actions": "Actions",
+                "btn_add_user": "Add User",
+                "btn_add_node": "Add Node"
             },
             "fa": {
                 "nav_dashboard": "داشبورد",
-                "nav_users": "مدیریت اشتراک‌ها",
-                "nav_nodes": "نودهای زیرساخت",
-                "nav_settings": "تنظیمات هسته",
-                "card_total_users": "کل اشتراک‌ها",
-                "card_active_nodes": "نودهای آنلاین",
-                "table_name": "شناسه کاربر",
-                "table_usage": "مصرف ترافیک",
+                "nav_users": "کاربران",
+                "nav_nodes": "نودها",
+                "nav_settings": "تنظیمات",
+                "card_total_users": "تعداد کاربران",
+                "card_active_nodes": "نودهای فعال",
+                "table_name": "نام کاربر",
+                "table_usage": "مصرف داده",
                 "table_status": "وضعیت",
-                "btn_add_user": "+ ایجاد اشتراک جدید",
-                "btn_add_node": "+ ثبت نود جدید"
+                "table_actions": "عملیات",
+                "btn_add_user": "افزودن کاربر",
+                "btn_add_node": "افزودن نود"
             }
         };
     </script>

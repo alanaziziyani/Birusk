@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
         mtprotoTag: ''
     };
 
-    let currentTheme = localStorage.getItem('theme') || 'dark';
+    let currentTheme = localStorage.getItem('theme') || 'light';
     html.setAttribute('data-theme', currentTheme);
     
     themeBtn.addEventListener('click', () => {
@@ -82,15 +82,8 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const formatDate = (unix) => {
-        if (!unix || unix === 0) return 'Unlimited / نامحدود';
-        return new Date(unix * 1000).toLocaleDateString(currentLang === 'fa' ? 'fa-IR' : 'en-US');
-    };
-
-    const calculateDaysLeft = (unix) => {
         if (!unix || unix === 0) return '∞';
-        const diff = (unix * 1000) - Date.now();
-        if (diff <= 0) return 'Expired';
-        return Math.ceil(diff / (1000 * 60 * 60 * 24));
+        return new Date(unix * 1000).toLocaleDateString(currentLang === 'fa' ? 'fa-IR' : 'en-US');
     };
 
     const fetchData = async () => {
@@ -122,11 +115,8 @@ document.addEventListener('DOMContentLoaded', () => {
             hex += chars[Math.floor(Math.random() * chars.length)];
         }
         document.getElementById('setting-mtproto-secret').value = hex;
-        const hintEl = document.getElementById('hint-secret');
-        if (hintEl) hintEl.innerText = hex;
     };
 
-    // --- فرم یوزرها (پشتیبانی از VMess) ---
     window.openUserWizard = (id = null) => {
         if (id) {
             const u = usersData.find(x => x.id === id);
@@ -145,8 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('form-user-trojan').checked = (u.trojan_enabled !== 0);
             document.getElementById('form-user-vmess').checked = (u.vmess_enabled !== 0);
             document.getElementById('form-user-remark').value = u.custom_remark || '';
-            
-            document.getElementById('user-modal-title').innerText = currentLang === 'fa' ? 'ویرایش کانفیگ و اشتراک' : 'Edit Subscription';
+            document.getElementById('user-modal-title').innerText = currentLang === 'fa' ? 'ویرایش کاربر' : 'Edit User';
         } else {
             document.getElementById('form-user-id').value = '';
             document.getElementById('form-user-name').value = '';
@@ -157,8 +146,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('form-user-trojan').checked = true;
             document.getElementById('form-user-vmess').checked = true;
             document.getElementById('form-user-remark').value = '';
-            
-            document.getElementById('user-modal-title').innerText = currentLang === 'fa' ? 'ایجاد اشتراک جدید' : 'Create Subscription';
+            document.getElementById('user-modal-title').innerText = currentLang === 'fa' ? 'افزودن کاربر' : 'Add User';
         }
         openModal('user-modal');
     };
@@ -168,7 +156,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const name = document.getElementById('form-user-name').value;
         const limit = parseFloat(document.getElementById('form-user-limit').value || 0);
         const days = parseInt(document.getElementById('form-user-days').value || 0);
-        
         const useVless = document.getElementById('form-user-vless').checked;
         const useTrojan = document.getElementById('form-user-trojan').checked;
         const useVmess = document.getElementById('form-user-vmess').checked;
@@ -180,18 +167,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (days > 0) exp = Math.floor(Date.now() / 1000) + (days * 86400);
 
         const payload = { 
-            name: name, 
-            data_limit: limit * (1024**3), 
-            expire_time: exp,
-            vless_enabled: useVless,
-            trojan_enabled: useTrojan,
-            vmess_enabled: useVmess,
-            custom_remark: remark
+            name: name, data_limit: limit * (1024**3), expire_time: exp,
+            vless_enabled: useVless, trojan_enabled: useTrojan, vmess_enabled: useVmess, custom_remark: remark
         };
 
         const btn = document.getElementById('btn-save-user');
         btn.disabled = true;
-        btn.innerText = 'Deploying...';
 
         try {
             if (id) {
@@ -200,44 +181,37 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 await fetch('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             }
-        } catch (e) {
-            console.error(e);
-        }
+        } catch (e) { console.error(e); }
 
         btn.disabled = false;
-        btn.innerText = 'Save & Deploy';
         closeModal('user-modal');
         renderContent('users');
     };
 
     window.deleteUser = async (id) => {
-        if(!confirm(currentLang === 'fa' ? 'آیا از حذف این اشتراک اطمینان دارید؟' : 'Are you sure you want to delete this subscription?')) return;
+        if(!confirm(currentLang === 'fa' ? 'آیا از حذف اطمینان دارید؟' : 'Are you sure?')) return;
         await fetch(`/api/users?id=${id}`, { method: 'DELETE' });
         renderContent('users');
     };
 
-    // --- منطق داینامیک نمایش فیلدهای نود ---
     window.toggleNodeFields = () => {
         const transport = document.getElementById('form-node-transport').value;
         const security = document.getElementById('form-node-security').value;
         
         const groupReality = document.getElementById('group-reality');
+        const groupFingerprint = document.getElementById('group-fingerprint');
         const labelPath = document.getElementById('label-path');
         
-        if (security === 'reality') {
-            groupReality.style.display = 'flex';
-        } else {
-            groupReality.style.display = 'none';
-        }
+        if (security === 'reality') groupReality.style.display = 'flex';
+        else groupReality.style.display = 'none';
 
-        if (transport === 'grpc') {
-            labelPath.innerText = 'gRPC ServiceName';
-        } else {
-            labelPath.innerText = 'WebSocket Path';
-        }
+        if (security === 'none') groupFingerprint.style.display = 'none';
+        else groupFingerprint.style.display = 'block';
+
+        if (transport === 'grpc') labelPath.innerText = 'ServiceName';
+        else labelPath.innerText = 'Path';
     };
 
-    // --- فرم نودها (پشتیبانی از Transport/Security/REALITY) ---
     window.openNodeWizard = (id = null) => {
         if (id) {
             const n = nodesData.find(x => x.id === id);
@@ -245,7 +219,6 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('form-node-name').value = n.name;
             document.getElementById('form-node-addr').value = n.address;
             document.getElementById('form-node-type').value = n.type;
-            
             document.getElementById('form-node-port').value = n.port || 443;
             document.getElementById('form-node-transport').value = n.transport || 'ws';
             document.getElementById('form-node-security').value = n.security || 'tls';
@@ -253,14 +226,13 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('form-node-host').value = n.host || '';
             document.getElementById('form-node-pbk').value = n.pbk || '';
             document.getElementById('form-node-sid').value = n.sid || '';
-            
-            document.getElementById('node-modal-title').innerText = currentLang === 'fa' ? 'ویرایش نود زیرساخت' : 'Edit Infrastructure Node';
+            document.getElementById('form-node-fingerprint').value = n.fingerprint || 'chrome';
+            document.getElementById('node-modal-title').innerText = currentLang === 'fa' ? 'ویرایش نود' : 'Edit Node';
         } else {
             document.getElementById('form-node-id').value = '';
             document.getElementById('form-node-name').value = '';
             document.getElementById('form-node-addr').value = '';
             document.getElementById('form-node-type').value = 'cloudflare';
-            
             document.getElementById('form-node-port').value = 443;
             document.getElementById('form-node-transport').value = 'ws';
             document.getElementById('form-node-security').value = 'tls';
@@ -268,10 +240,9 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('form-node-host').value = '';
             document.getElementById('form-node-pbk').value = '';
             document.getElementById('form-node-sid').value = '';
-            
-            document.getElementById('node-modal-title').innerText = currentLang === 'fa' ? 'ثبت نود زیرساخت جدید' : 'Register New Edge Node';
+            document.getElementById('form-node-fingerprint').value = 'chrome';
+            document.getElementById('node-modal-title').innerText = currentLang === 'fa' ? 'افزودن نود' : 'Add Node';
         }
-        
         window.toggleNodeFields();
         openModal('node-modal');
     };
@@ -281,7 +252,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const name = document.getElementById('form-node-name').value;
         const addr = document.getElementById('form-node-addr').value;
         const type = document.getElementById('form-node-type').value;
-        
         const port = parseInt(document.getElementById('form-node-port').value || 443);
         const transport = document.getElementById('form-node-transport').value;
         const security = document.getElementById('form-node-security').value;
@@ -289,40 +259,33 @@ document.addEventListener('DOMContentLoaded', () => {
         const host = document.getElementById('form-node-host').value;
         const pbk = document.getElementById('form-node-pbk').value;
         const sid = document.getElementById('form-node-sid').value;
+        const fingerprint = document.getElementById('form-node-fingerprint').value;
 
-        if (!name || !addr) return alert('Name and Address are required!');
+        if (!name || !addr) return alert('Required fields missing!');
 
         const payload = { 
-            name: name, type: type, address: addr,
-            port: port, transport: transport, security: security,
-            path: path, host: host, pbk: pbk, sid: sid
+            name: name, type: type, address: addr, port: port, transport: transport, security: security,
+            path: path, host: host, pbk: pbk, sid: sid, fingerprint: fingerprint
         };
         
         const btn = document.getElementById('btn-save-node');
         btn.disabled = true;
-        btn.innerText = 'Connecting...';
 
         try {
             if (id) {
-                payload.id = id;
                 await fetch('/api/nodes', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             } else {
                 await fetch('/api/nodes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             }
-        } catch (e) {
-            console.error(e);
-        }
+        } catch (e) { console.error(e); }
 
         btn.disabled = false;
-        btn.innerText = 'Connect Node';
         closeModal('node-modal');
-        
-        alert(currentLang === 'fa' ? 'نود با موفقیت ثبت شد. توکن ارتباطی تولید گردید.' : 'Node registered successfully. Token generated.');
         renderContent('nodes');
     };
 
     window.deleteNode = async (id) => {
-        if(!confirm(currentLang === 'fa' ? 'آیا از حذف این نود زیرساخت اطمینان دارید؟' : 'Are you sure you want to delete this node?')) return;
+        if(!confirm(currentLang === 'fa' ? 'آیا از حذف اطمینان دارید؟' : 'Are you sure?')) return;
         await fetch(`/api/nodes?id=${id}`, { method: 'DELETE' });
         renderContent('nodes');
     };
@@ -331,36 +294,33 @@ document.addEventListener('DOMContentLoaded', () => {
         coreSettings.subDomain = document.getElementById('setting-domain').value;
         coreSettings.defaultCleanIp = document.getElementById('setting-cleanip').value;
         coreSettings.enableStats = document.getElementById('setting-stats').checked;
-        
         coreSettings.mtprotoEnabled = document.getElementById('setting-mtproto-enable').checked;
         coreSettings.mtprotoPort = document.getElementById('setting-mtproto-port').value; 
         coreSettings.mtprotoSecret = document.getElementById('setting-mtproto-secret').value;
         coreSettings.mtprotoTag = document.getElementById('setting-mtproto-tag').value;
         
         localStorage.setItem('birusk_settings', JSON.stringify(coreSettings));
-        
         const btn = document.getElementById('btn-save-settings');
-        btn.innerText = 'Saved Successfully! ✔️';
-        btn.style.background = 'var(--success)';
         
         fetch('/api/settings', { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify(coreSettings) 
-        }).catch(e => console.log("Settings API sync error", e));
-
-        setTimeout(() => {
-            btn.innerText = 'Save Core Configurations';
-            btn.style.background = 'var(--primary)';
-        }, 2000);
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(coreSettings) 
+        }).then(() => {
+            btn.innerText = currentLang === 'fa' ? 'ذخیره شد ✔' : 'Saved ✔';
+            setTimeout(() => { btn.innerText = currentLang === 'fa' ? 'ذخیره تنظیمات' : 'Save Settings'; }, 2000);
+        });
     };
 
+    // --- SVG Icons Helper ---
+    const iconData = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>`;
+    const iconUsers = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>`;
+    const iconCopy = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+    const iconEdit = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
+    const iconTrash = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
+
     const renderContent = async (page) => {
-        contentArea.innerHTML = '<div style="text-align:center; padding: 40px; color: var(--text-muted);">Fetching Live Data...</div>';
+        contentArea.innerHTML = '<div style="text-align:center; padding: 40px; color: var(--text-muted);">Loading...</div>';
         
-        if (page !== 'settings') {
-            await fetchData();
-        }
+        if (page !== 'settings') await fetchData();
 
         let htmlContent = '';
 
@@ -368,102 +328,71 @@ document.addEventListener('DOMContentLoaded', () => {
             const totalTraffic = usersData.reduce((acc, user) => acc + (user.used_data || 0), 0);
             const maxTrafficCap = usersData.reduce((acc, user) => acc + (user.data_limit || 0), 0);
             const activeNodes = nodesData.filter(n => n.status === 'active').length;
-            const expiredUsers = usersData.filter(u => u.expire_time > 0 && (u.expire_time * 1000) < Date.now()).length;
             
-            let networkPercent = 0;
-            if (maxTrafficCap > 0) {
-                networkPercent = Math.min(Math.round((totalTraffic / maxTrafficCap) * 100), 100);
-            }
-
             htmlContent = `
-                <div class="grid-cards" style="margin-bottom: 24px;">
-                    <div class="card">
-                        <span class="card-title" data-i18n="card_total_users">Total Subscriptions</span>
-                        <span class="card-value">${usersData.length} <span style="font-size:1rem; color:var(--text-muted); font-weight:normal;">/ ${expiredUsers} Expired</span></span>
+                <div class="grid-cards">
+                    <div class="card" style="display: flex; align-items: center; gap: 20px; padding: 32px;">
+                        <div style="background: var(--primary-light); color: var(--primary); width: 64px; height: 64px; border-radius: 16px; display: flex; justify-content: center; align-items: center;">
+                            ${iconData}
+                        </div>
+                        <div>
+                            <span class="card-title" style="margin-bottom: 4px;" data-i18n="table_usage">Data Usage</span>
+                            <span class="card-value">${formatBytes(totalTraffic)}</span>
+                        </div>
                     </div>
-                    <div class="card">
-                        <span class="card-title" data-i18n="card_active_nodes">Online Edge Nodes</span>
-                        <span class="card-value">${activeNodes} <span style="font-size:1rem; color:var(--success); font-weight:normal;">● Active</span></span>
-                    </div>
-                </div>
-                
-                <div class="card">
-                    <h3 style="margin-bottom: 16px; color: var(--primary);">Network Utilization Overview</h3>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                        <span style="font-weight: bold;">Global Bandwidth</span>
-                        <span style="color: var(--text-muted);">${formatBytes(totalTraffic)} ${maxTrafficCap > 0 ? '/ ' + formatBytes(maxTrafficCap) : ''}</span>
-                    </div>
-                    <div class="visual-bar-container">
-                        <div class="visual-bar" style="width: ${networkPercent}%; ${networkPercent > 80 ? 'background: var(--danger);' : ''}"></div>
-                    </div>
-                    <div style="margin-top: 20px; color: var(--text-muted); font-size: 0.9rem;">
-                        Real-time visualization of your distributed nodes' bandwidth consumption.
+                    <div class="card" style="display: flex; align-items: center; gap: 20px; padding: 32px;">
+                        <div style="background: rgba(16, 185, 129, 0.15); color: var(--success); width: 64px; height: 64px; border-radius: 16px; display: flex; justify-content: center; align-items: center;">
+                            ${iconUsers}
+                        </div>
+                        <div>
+                            <span class="card-title" style="margin-bottom: 4px;" data-i18n="card_total_users">Users</span>
+                            <span class="card-value">${usersData.length}</span>
+                        </div>
                     </div>
                 </div>
             `;
         } 
         else if (page === 'users') {
             htmlContent = `
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <h3 style="color: var(--text-main);">Subscription Management</h3>
-                    <button onclick="openUserWizard()" data-i18n="btn_add_user">+ Create Client Sub</button>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                    <div></div>
+                    <button onclick="openUserWizard()" data-i18n="btn_add_user">Add User</button>
                 </div>
-                <div class="card" style="padding: 0; overflow-x: auto;">
+                <div class="card" style="padding: 0; overflow: hidden;">
                     <table>
                         <thead>
                             <tr>
-                                <th data-i18n="table_name">Client Identifier</th>
-                                <th data-i18n="table_usage">Data Utilization</th>
-                                <th>Validity (Days Left)</th>
-                                <th data-i18n="table_status">Status</th>
-                                <th>Configuration Control</th>
+                                <th data-i18n="table_name">User</th>
+                                <th data-i18n="table_usage">Usage</th>
+                                <th style="text-align: right;" data-i18n="table_actions">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             ${usersData.map(u => {
-                                let percent = 0;
-                                if(u.data_limit > 0) percent = Math.min(Math.round((u.used_data / u.data_limit) * 100), 100);
                                 const isExp = u.expire_time > 0 && (u.expire_time * 1000) < Date.now();
+                                const statusClass = isExp ? 'status-expired' : 'status-active';
                                 
                                 const subBaseUrl = coreSettings.subDomain ? 
                                     (coreSettings.subDomain.startsWith('http') ? coreSettings.subDomain : 'https://' + coreSettings.subDomain) : 
                                     window.location.origin;
-                                    
                                 const subLink = `${subBaseUrl}/sub?id=${u.id}`;
                                 
-                                let tgBtnHtml = '';
-                                if (coreSettings.mtprotoEnabled && coreSettings.mtprotoPort && coreSettings.mtprotoSecret) {
-                                    let tgServer = 'لطفاً از لینکی که ربات تلگرام به شما داده استفاده کنید!';
-                                    tgBtnHtml = `<button onclick="alert('${tgServer}')" class="btn-telegram" style="padding:8px 12px; font-size:0.85rem; border-radius:8px;">✈️ Info</button>`;
-                                }
-
                                 return `
                                 <tr>
-                                    <td style="font-weight:bold; color: var(--primary);">${u.name}</td>
-                                    <td style="min-width: 180px;">
-                                        <div style="display:flex; justify-content:space-between; font-size:0.85rem; margin-bottom:4px;">
-                                            <span>${formatBytes(u.used_data)}</span>
-                                            <span style="color:var(--text-muted);">${u.data_limit ? formatBytes(u.data_limit) : '∞'}</span>
-                                        </div>
-                                        <div class="visual-bar-container" style="height:4px;">
-                                            <div class="visual-bar" style="width: ${percent}%; ${percent > 85 ? 'background: var(--danger);' : ''}"></div>
+                                    <td data-label="User" style="font-weight: 500;">
+                                        <div style="display: flex; align-items: center;">
+                                            <span class="status-dot ${statusClass}"></span>
+                                            ${u.name}
                                         </div>
                                     </td>
-                                    <td>
-                                        <div style="font-weight:bold; color: ${isExp ? 'var(--danger)' : 'var(--text-main)'};">${calculateDaysLeft(u.expire_time)} Days</div>
-                                        <div style="font-size:0.75rem; color:var(--text-muted);">${formatDate(u.expire_time)}</div>
+                                    <td data-label="Usage" style="color: var(--text-muted);">
+                                        ${formatBytes(u.used_data)} / ${u.data_limit ? formatBytes(u.data_limit) : '∞'}
                                     </td>
-                                    <td>
-                                        <span style="background: ${isExp ? 'rgba(244,63,94,0.1)' : 'rgba(16,185,129,0.1)'}; color: ${isExp ? 'var(--danger)' : 'var(--success)'}; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;">
-                                            ${isExp ? 'Expired' : 'Active'}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <div style="display:flex; gap:8px;">
-                                            ${tgBtnHtml}
-                                            <button onclick="copyText('${subLink}', 'Subscription Link Copied!')" style="padding:8px 12px; font-size:0.85rem; border-radius:8px;">🔗 Sub</button>
-                                            <button onclick="openUserWizard('${u.id}')" style="padding:8px 12px; background:var(--bg-card); color:var(--primary); border:1px solid var(--primary); font-size:0.85rem; border-radius:8px;">⚙️ Manage</button>
-                                            <button onclick="deleteUser('${u.id}')" class="btn-danger" style="padding:8px 12px; font-size:0.85rem; border-radius:8px;">🗑</button>
+                                    <td data-label="Actions" style="text-align: right;">
+                                        <div style="display:flex; gap:8px; justify-content: flex-end;">
+                                            <button class="btn-icon" onclick="copyText('${subLink}', 'Copied!')" title="Copy Link">${iconCopy}</button>
+                                            <button class="btn-icon" onclick="openUserWizard('${u.id}')" title="Edit">${iconEdit}</button>
+                                            <button class="btn-icon btn-danger" onclick="deleteUser('${u.id}')" title="Delete" style="border:none;">${iconTrash}</button>
                                         </div>
                                     </td>
                                 </tr>
@@ -476,49 +405,36 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         else if (page === 'nodes') {
             htmlContent = `
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <h3 style="color: var(--text-main);">Infrastructure Routing Nodes</h3>
-                    <button onclick="openNodeWizard()" data-i18n="btn_add_node">+ Register Edge Node</button>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                    <div></div>
+                    <button onclick="openNodeWizard()" data-i18n="btn_add_node">Add Node</button>
                 </div>
-                <div class="card" style="padding: 0; overflow-x: auto;">
+                <div class="card" style="padding: 0; overflow: hidden;">
                     <table>
                         <thead>
                             <tr>
-                                <th>Node Identity</th>
-                                <th>Server Target / Port</th>
-                                <th>Protocol Specs</th>
-                                <th data-i18n="table_status">Status</th>
-                                <th>API Access</th>
+                                <th>Address</th>
+                                <th>Specs</th>
+                                <th style="text-align: right;" data-i18n="table_actions">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             ${nodesData.map(n => `
                                 <tr>
-                                    <td style="font-weight:bold; font-size:1.05rem;">${n.name}</td>
-                                    <td>
-                                        <span style="font-family:monospace; background:rgba(255,255,255,0.05); padding:4px 8px; border-radius:6px; color:var(--text-muted); display:block; margin-bottom:4px;">${n.address}</span>
-                                        <span style="font-size:0.8rem; color:var(--primary);">Port: ${n.port || 443}</span>
-                                    </td>
-                                    <td>
-                                        <div style="display:flex; flex-direction:column; gap:4px;">
-                                            <span style="background: rgba(99,102,241,0.1); color: var(--primary); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight:600; width: fit-content;">
-                                                Type: ${n.type.toUpperCase()}
-                                            </span>
-                                            <span style="background: rgba(16,185,129,0.1); color: var(--success); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight:600; width: fit-content;">
-                                                Net: ${n.transport.toUpperCase()} / Sec: ${n.security.toUpperCase()}
-                                            </span>
+                                    <td data-label="Address" style="font-weight: 500;">
+                                        <div style="display: flex; align-items: center;">
+                                            <span class="status-dot ${n.status === 'active' ? 'status-active' : 'status-offline'}"></span>
+                                            ${n.address}:${n.port}
                                         </div>
                                     </td>
-                                    <td>
-                                        <span style="background: ${n.status === 'active' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)'}; color: ${n.status === 'active' ? 'var(--success)' : 'var(--danger)'}; padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;">
-                                            ● ${n.status === 'active' ? 'Operational' : 'Offline'}
-                                        </span>
+                                    <td data-label="Specs" style="color: var(--text-muted); font-size: 0.85rem;">
+                                        ${n.transport.toUpperCase()} / ${n.security.toUpperCase()}
                                     </td>
-                                    <td>
-                                        <div style="display:flex; gap:8px;">
-                                            <button onclick="copyText('${n.token}', 'Worker Token Copied to Clipboard!')" style="padding:8px 12px; background:var(--bg-card); color:var(--success); border:1px solid var(--success); font-size:0.85rem; border-radius:8px;">🔑 Token</button>
-                                            <button onclick="openNodeWizard('${n.id}')" style="padding:8px 12px; background:var(--bg-card); color:var(--primary); border:1px solid var(--primary); font-size:0.85rem; border-radius:8px;">⚙️</button>
-                                            <button onclick="deleteNode('${n.id}')" class="btn-danger" style="padding:8px 12px; font-size:0.85rem; border-radius:8px;">🗑</button>
+                                    <td data-label="Actions" style="text-align: right;">
+                                        <div style="display:flex; gap:8px; justify-content: flex-end;">
+                                            <button class="btn-icon" onclick="copyText('${n.token}', 'Token Copied!')" title="Copy Token">${iconCopy}</button>
+                                            <button class="btn-icon" onclick="openNodeWizard('${n.id}')" title="Edit">${iconEdit}</button>
+                                            <button class="btn-icon btn-danger" onclick="deleteNode('${n.id}')" title="Delete" style="border:none;">${iconTrash}</button>
                                         </div>
                                     </td>
                                 </tr>
@@ -530,35 +446,22 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         else if (page === 'settings') {
             htmlContent = `
-                <div style="max-width: 800px; margin: 0 auto;">
+                <div style="max-width: 700px; margin: 0 auto;">
                     <div class="card">
-                        <h3 style="margin-bottom: 24px; color: var(--primary); border-bottom: 1px solid var(--border); padding-bottom: 12px;">Global Core Settings</h3>
-                        
-                        <div class="form-group" style="margin-bottom: 20px;">
-                            <label style="font-weight:bold; margin-bottom:8px;">Subscription Link Domain</label>
-                            <input type="text" id="setting-domain" placeholder="e.g. sub.yourdomain.com" value="${coreSettings.subDomain || ''}">
+                        <div class="form-group">
+                            <label>Subscription Domain</label>
+                            <input type="text" id="setting-domain" placeholder="sub.domain.com" value="${coreSettings.subDomain || ''}">
                         </div>
 
-                        <div class="form-group" style="margin-bottom: 20px;">
-                            <label style="font-weight:bold; margin-bottom:8px;">Global Clean IP</label>
+                        <div class="form-group">
+                            <label>Global Clean IP</label>
                             <input type="text" id="setting-cleanip" placeholder="e.g. 104.17.142.23" value="${coreSettings.defaultCleanIp || ''}">
                         </div>
 
-                        <div class="switch-group" style="margin-bottom: 10px;">
+                        <div class="switch-group">
                             <div>
-                                <div style="font-weight: 600;">Live Statistics Engine</div>
-                            </div>
-                            <label class="switch">
-                                <input type="checkbox" id="setting-stats" ${coreSettings.enableStats ? 'checked' : ''}>
-                                <span class="slider"></span>
-                            </label>
-                        </div>
-                        
-                        <h3 style="margin-top: 32px; margin-bottom: 16px; color: var(--telegram); border-bottom: 1px solid var(--border); padding-bottom: 12px;">Telegram MTProto Proxy</h3>
-                        
-                        <div class="switch-group" style="margin-bottom: 20px;">
-                            <div>
-                                <div style="font-weight: 600;">Enable Telegram Proxy</div>
+                                <div style="font-weight: 600;">Telegram MTProto</div>
+                                <div style="font-size: 0.8rem; color: var(--text-muted);">Enable internal proxy engine</div>
                             </div>
                             <label class="switch">
                                 <input type="checkbox" id="setting-mtproto-enable" ${coreSettings.mtprotoEnabled ? 'checked' : ''}>
@@ -566,34 +469,26 @@ document.addEventListener('DOMContentLoaded', () => {
                             </label>
                         </div>
                         
-                        <div class="form-row" style="margin-bottom: 20px;">
+                        <div class="form-row" style="margin-top: 16px;">
                             <div class="form-group">
-                                <label style="font-weight:bold; margin-bottom:8px;">Internal Proxy Port</label>
-                                <input type="number" id="setting-mtproto-port" placeholder="e.g. 8566" value="${coreSettings.mtprotoPort || '8566'}">
+                                <label>MTProto Port</label>
+                                <input type="number" id="setting-mtproto-port" value="${coreSettings.mtprotoPort || '8566'}">
                             </div>
                             <div class="form-group">
-                                <label style="font-weight:bold; margin-bottom:8px;">Sponsor Tag (from Bot)</label>
-                                <input type="text" id="setting-mtproto-tag" placeholder="Paste tag from @TelegramProxyBot" value="${coreSettings.mtprotoTag || ''}">
+                                <label>Sponsor Tag</label>
+                                <input type="text" id="setting-mtproto-tag" value="${coreSettings.mtprotoTag || ''}">
                             </div>
                         </div>
                         
-                        <div class="form-group" style="margin-bottom: 20px;">
-                            <label style="font-weight:bold; margin-bottom:8px;">MTProto Base Secret (Exactly 32 Hex Chars)</label>
+                        <div class="form-group">
+                            <label>MTProto Secret</label>
                             <div style="display:flex; gap:12px;">
-                                <input type="text" id="setting-mtproto-secret" placeholder="Click Auto Generate..." value="${coreSettings.mtprotoSecret || ''}" style="flex:1;">
-                                <button onclick="generateMtprotoSecret()" class="btn-secondary" style="color:var(--telegram); border-color:var(--telegram); white-space:nowrap;">🔄 Auto Generate</button>
+                                <input type="text" id="setting-mtproto-secret" value="${coreSettings.mtprotoSecret || ''}" style="flex:1;">
+                                <button onclick="generateMtprotoSecret()" class="btn-secondary">Generate</button>
                             </div>
                         </div>
 
-                        <div style="background: rgba(46, 170, 220, 0.05); border: 1px dashed var(--telegram); padding: 16px; border-radius: 12px; margin-bottom: 30px;">
-                            <h4 style="color: var(--telegram); margin-bottom: 12px; display:flex; align-items:center; gap:8px;">🤖 @TelegramProxyBot Registration Info</h4>
-                            <p style="font-size:0.9rem; margin-bottom: 12px; color:var(--text-main);">For the bot, use your Railway TCP Address and the Secret below.</p>
-                            <ul style="list-style:none; font-family:monospace; color:var(--text-muted); font-size:0.95rem; line-height:1.8; background:var(--bg-base); padding:12px; border-radius:8px; border:1px solid var(--border);">
-                                <li><strong style="color:var(--text-main); display:inline-block; width:80px;">Secret </strong> <span id="hint-secret">${coreSettings.mtprotoSecret || '(Click Auto Generate First)'}</span></li>
-                            </ul>
-                        </div>
-
-                        <button id="btn-save-settings" onclick="saveSettings()" style="width:100%; font-size:1.1rem; padding:16px;">Save Core Configurations</button>
+                        <button id="btn-save-settings" onclick="saveSettings()" style="width:100%; margin-top: 24px; padding: 12px;" data-i18n="nav_settings">Save Settings</button>
                     </div>
                 </div>
             `;

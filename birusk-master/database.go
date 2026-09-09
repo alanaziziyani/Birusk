@@ -44,6 +44,7 @@ func InitDB(filepath string) {
 		pbk TEXT DEFAULT '',
 		sid TEXT DEFAULT '',
 		flow TEXT DEFAULT '',
+		fingerprint TEXT DEFAULT 'chrome',
 		token TEXT UNIQUE NOT NULL,
 		status TEXT DEFAULT 'active'
 	);
@@ -66,16 +67,13 @@ func InitDB(filepath string) {
 		log.Fatal(err)
 	}
 
-	// --- آپدیت‌های قبلی دیتابیس ---
+	// آپدیت‌های قبلی و فعلی ساختار دیتابیس (بدون پاک شدن اطلاعات)
 	DB.Exec("ALTER TABLE users ADD COLUMN expire_time INTEGER DEFAULT 0;")
 	DB.Exec("ALTER TABLE nodes ADD COLUMN clean_ip TEXT DEFAULT '';")
 	DB.Exec("ALTER TABLE users ADD COLUMN vless_enabled INTEGER DEFAULT 1;")
 	DB.Exec("ALTER TABLE users ADD COLUMN trojan_enabled INTEGER DEFAULT 1;")
 	DB.Exec("ALTER TABLE users ADD COLUMN custom_remark TEXT DEFAULT '';")
-
-	// --- آپدیت‌های فاز 1: ترنسپورت‌ها، پروتکل‌ها و امنیت (بدون حذف دیتا) ---
 	DB.Exec("ALTER TABLE users ADD COLUMN vmess_enabled INTEGER DEFAULT 1;")
-	
 	DB.Exec("ALTER TABLE nodes ADD COLUMN port INTEGER DEFAULT 443;")
 	DB.Exec("ALTER TABLE nodes ADD COLUMN transport TEXT DEFAULT 'ws';")
 	DB.Exec("ALTER TABLE nodes ADD COLUMN security TEXT DEFAULT 'tls';")
@@ -84,8 +82,8 @@ func InitDB(filepath string) {
 	DB.Exec("ALTER TABLE nodes ADD COLUMN pbk TEXT DEFAULT '';")
 	DB.Exec("ALTER TABLE nodes ADD COLUMN sid TEXT DEFAULT '';")
 	DB.Exec("ALTER TABLE nodes ADD COLUMN flow TEXT DEFAULT '';")
+	DB.Exec("ALTER TABLE nodes ADD COLUMN fingerprint TEXT DEFAULT 'chrome';")
 
-	// مقداردهی اولیه تنظیمات پیش‌فرض در صورت عدم وجود
 	initDefaultSettings()
 }
 

@@ -25,8 +25,6 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// --- ساختارهای داده (Structs) ---
-
 type User struct {
 	ID            string `json:"id"`
 	Name          string `json:"name"`
@@ -41,21 +39,22 @@ type User struct {
 }
 
 type Node struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Type      string `json:"type"`
-	Address   string `json:"address"`
-	CleanIP   string `json:"clean_ip"`
-	Port      int    `json:"port"`
-	Transport string `json:"transport"`
-	Security  string `json:"security"`
-	Path      string `json:"path"`
-	Host      string `json:"host"`
-	Pbk       string `json:"pbk"`
-	Sid       string `json:"sid"`
-	Flow      string `json:"flow"`
-	Token     string `json:"token"`
-	Status    string `json:"status"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	Address     string `json:"address"`
+	CleanIP     string `json:"clean_ip"`
+	Port        int    `json:"port"`
+	Transport   string `json:"transport"`
+	Security    string `json:"security"`
+	Path        string `json:"path"`
+	Host        string `json:"host"`
+	Pbk         string `json:"pbk"`
+	Sid         string `json:"sid"`
+	Flow        string `json:"flow"`
+	Fingerprint string `json:"fingerprint"`
+	Token       string `json:"token"`
+	Status      string `json:"status"`
 }
 
 type AppSettings struct {
@@ -68,7 +67,6 @@ type AppSettings struct {
 	MtprotoTag     string `json:"mtprotoTag"`
 }
 
-// ساختار استاندارد برای تولید کانفیگ VMess
 type VMessConfig struct {
 	V    string `json:"v"`
 	Ps   string `json:"ps"`
@@ -83,8 +81,6 @@ type VMessConfig struct {
 	Sni  string `json:"sni"`
 }
 
-// --- متغیرهای سراسری سیستم ---
-
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true
@@ -95,8 +91,6 @@ var (
 	mtprotoProcess *exec.Cmd
 	mtprotoMutex   sync.Mutex
 )
-
-// --- توابع کمکی (Utilities) ---
 
 func generateToken() string {
 	bytes := make([]byte, 16)
@@ -113,8 +107,6 @@ func cleanDomain(addr string) string {
 	}
 	return addr
 }
-
-// --- موتور اصلی (Main) ---
 
 func main() {
 	port := os.Getenv("PORT")
@@ -153,13 +145,11 @@ func main() {
 
 	mux.HandleFunc("GET /api/sync", handleNodeSync)
 	mux.HandleFunc("POST /api/usage", handleReportUsage)
-	mux.HandleFunc("GET /sub", handleSubscription) // قلب تولید کانفیگ‌ها
+	mux.HandleFunc("GET /sub", handleSubscription) 
 
 	log.Printf("AlanCoreNet Master Engine running on port %s", port)
 	log.Fatal(http.ListenAndServe(":"+port, mux))
 }
-
-// --- موتور پراکسی داخلی (VLESS Proxy) ---
 
 func handleProxy(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -266,8 +256,6 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 		RecordUsage(userID, nodeID, totalUsage)
 	}
 }
-
-// --- مدیریت تنظیمات و پروکسی MTProto اسپانسری ---
 
 func loadSettingsFromDB() AppSettings {
 	var s AppSettings
@@ -428,8 +416,6 @@ func applyMtprotoEngine(s AppSettings) {
 	log.Println("MTProto Engine: Sub-process operational on port", s.MtprotoPort, "with FakeTLS enabled.")
 }
 
-// --- مدیریت کاربران (API) ---
-
 func handleGetUsers(w http.ResponseWriter, r *http.Request) {
 	rows, err := DB.Query("SELECT id, name, status, data_limit, expire_time, vless_enabled, trojan_enabled, vmess_enabled, custom_remark FROM users")
 	if err != nil {
@@ -524,10 +510,8 @@ func handleEditUser(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// --- مدیریت نودها (API) ---
-
 func handleGetNodes(w http.ResponseWriter, r *http.Request) {
-	rows, err := DB.Query("SELECT id, name, type, address, clean_ip, port, transport, security, path, host, pbk, sid, flow, token, status FROM nodes")
+	rows, err := DB.Query("SELECT id, name, type, address, clean_ip, port, transport, security, path, host, pbk, sid, flow, fingerprint, token, status FROM nodes")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -537,7 +521,7 @@ func handleGetNodes(w http.ResponseWriter, r *http.Request) {
 	var nodeList []Node
 	for rows.Next() {
 		var n Node
-		rows.Scan(&n.ID, &n.Name, &n.Type, &n.Address, &n.CleanIP, &n.Port, &n.Transport, &n.Security, &n.Path, &n.Host, &n.Pbk, &n.Sid, &n.Flow, &n.Token, &n.Status)
+		rows.Scan(&n.ID, &n.Name, &n.Type, &n.Address, &n.CleanIP, &n.Port, &n.Transport, &n.Security, &n.Path, &n.Host, &n.Pbk, &n.Sid, &n.Flow, &n.Fingerprint, &n.Token, &n.Status)
 		nodeList = append(nodeList, n)
 	}
 
@@ -559,10 +543,14 @@ func handleCreateNode(w http.ResponseWriter, r *http.Request) {
 	newID := uuid.New().String()
 	token := generateToken()
 
+	if n.Fingerprint == "" {
+		n.Fingerprint = "chrome"
+	}
+
 	_, err := DB.Exec(`INSERT INTO nodes 
-		(id, name, type, address, clean_ip, port, transport, security, path, host, pbk, sid, flow, token) 
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, 
-		newID, n.Name, n.Type, n.Address, n.CleanIP, n.Port, n.Transport, n.Security, n.Path, n.Host, n.Pbk, n.Sid, n.Flow, token)
+		(id, name, type, address, clean_ip, port, transport, security, path, host, pbk, sid, flow, fingerprint, token) 
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, 
+		newID, n.Name, n.Type, n.Address, n.CleanIP, n.Port, n.Transport, n.Security, n.Path, n.Host, n.Pbk, n.Sid, n.Flow, n.Fingerprint, token)
 	
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -587,9 +575,9 @@ func handleEditNode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err := DB.Exec(`UPDATE nodes SET 
-		name = ?, address = ?, clean_ip = ?, port = ?, transport = ?, security = ?, path = ?, host = ?, pbk = ?, sid = ?, flow = ? 
+		name = ?, address = ?, clean_ip = ?, port = ?, transport = ?, security = ?, path = ?, host = ?, pbk = ?, sid = ?, flow = ?, fingerprint = ? 
 		WHERE id = ?`, 
-		n.Name, n.Address, n.CleanIP, n.Port, n.Transport, n.Security, n.Path, n.Host, n.Pbk, n.Sid, n.Flow, n.ID)
+		n.Name, n.Address, n.CleanIP, n.Port, n.Transport, n.Security, n.Path, n.Host, n.Pbk, n.Sid, n.Flow, n.Fingerprint, n.ID)
 	
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -598,8 +586,6 @@ func handleEditNode(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 }
-
-// --- همگام‌سازی، آمار و موتور ساخت پیشرفته سابسکریپشن ---
 
 func handleNodeSync(w http.ResponseWriter, r *http.Request) {
 	authHeader := r.Header.Get("Authorization")
@@ -674,7 +660,7 @@ func handleReportUsage(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// موتور قدرتمند تولید کانفیگ (Xray Generator Engine)
+// موتور ارتقا یافته با xhttp، splithttp و uTLS
 func handleSubscription(w http.ResponseWriter, r *http.Request) {
 	userID := r.URL.Query().Get("id")
 	if userID == "" {
@@ -698,7 +684,7 @@ func handleSubscription(w http.ResponseWriter, r *http.Request) {
 
 	settings := loadSettingsFromDB()
 
-	rows, err := DB.Query("SELECT name, type, address, clean_ip, port, transport, security, path, host, pbk, sid, flow FROM nodes WHERE status = 'active'")
+	rows, err := DB.Query("SELECT name, type, address, clean_ip, port, transport, security, path, host, pbk, sid, flow, fingerprint FROM nodes WHERE status = 'active'")
 	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
@@ -709,31 +695,28 @@ func handleSubscription(w http.ResponseWriter, r *http.Request) {
 
 	for rows.Next() {
 		var n Node
-		rows.Scan(&n.Name, &n.Type, &n.Address, &n.CleanIP, &n.Port, &n.Transport, &n.Security, &n.Path, &n.Host, &n.Pbk, &n.Sid, &n.Flow)
+		rows.Scan(&n.Name, &n.Type, &n.Address, &n.CleanIP, &n.Port, &n.Transport, &n.Security, &n.Path, &n.Host, &n.Pbk, &n.Sid, &n.Flow, &n.Fingerprint)
 
 		safeAddr := cleanDomain(n.Address)
 		targetIP := safeAddr
 
-		// تعیین IP نهایی (Clean IP یا آدرس اصلی)
 		if n.CleanIP != "" {
 			targetIP = cleanDomain(n.CleanIP)
 		} else if settings.DefaultCleanIp != "" {
 			targetIP = cleanDomain(settings.DefaultCleanIp)
 		}
 
-		// تعیین نام کانفیگ
 		remarkName := n.Name
 		if strings.TrimSpace(customRemark) != "" {
 			remarkName = strings.TrimSpace(customRemark)
 		}
 
-		// --- ساخت پارامترهای مشترک (Query Params) ---
 		q := url.Values{}
 		q.Add("type", n.Transport)
 		q.Add("security", n.Security)
 
-		// تنظیمات بر اساس ترنسپورت
-		if n.Transport == "ws" {
+		// هندل کردن ترنسپورت‌های جدید: xhttp و splithttp
+		if n.Transport == "ws" || n.Transport == "xhttp" || n.Transport == "splithttp" {
 			q.Add("path", n.Path)
 			if n.Host != "" { q.Add("host", n.Host) } else { q.Add("host", safeAddr) }
 		} else if n.Transport == "grpc" {
@@ -741,34 +724,38 @@ func handleSubscription(w http.ResponseWriter, r *http.Request) {
 			q.Add("mode", "multi")
 		}
 
-		// تنظیمات بر اساس امنیت
-		if n.Security == "tls" {
+		// هندل کردن امنیت و uTLS Fingerprint
+		if n.Security == "tls" || n.Security == "reality" {
 			if n.Host != "" { q.Add("sni", n.Host) } else { q.Add("sni", safeAddr) }
-		} else if n.Security == "reality" {
-			if n.Host != "" { q.Add("sni", n.Host) } else { q.Add("sni", safeAddr) }
+			
+			fp := n.Fingerprint
+			if fp == "" { fp = "chrome" }
+			q.Add("fp", fp)
+			
+			// اضافه کردن استاندارد ALPN برای xhttp و splithttp جهت سرعت و عبور بهتر
+			if n.Transport == "xhttp" || n.Transport == "splithttp" {
+				q.Add("alpn", "h2,http/1.1")
+			}
+		}
+
+		if n.Security == "reality" {
 			q.Add("pbk", n.Pbk)
 			q.Add("sid", n.Sid)
-			q.Add("fp", "chrome") // استاندارد ضد فیلترینگ
 			if n.Flow != "" { q.Add("flow", n.Flow) }
 		}
 
 		queryString := q.Encode()
 
-		// --- تولید کانفیگ‌ها بر اساس انتخاب کاربر ---
-		
-		// 1. VLESS
 		if vlessEnabled == 1 {
 			vlessUrl := fmt.Sprintf("vless://%s@%s:%d?%s#%s-VLESS", userID, targetIP, n.Port, queryString, url.PathEscape(remarkName))
 			configs = append(configs, vlessUrl)
 		}
 		
-		// 2. Trojan
 		if trojanEnabled == 1 {
 			trojanUrl := fmt.Sprintf("trojan://%s@%s:%d?%s#%s-Trojan", userID, targetIP, n.Port, queryString, url.PathEscape(remarkName))
 			configs = append(configs, trojanUrl)
 		}
 
-		// 3. VMess (تولید JSON استاندارد)
 		if vmessEnabled == 1 {
 			sniVal := safeAddr
 			if n.Host != "" { sniVal = n.Host }
@@ -787,7 +774,6 @@ func handleSubscription(w http.ResponseWriter, r *http.Request) {
 				Sni:  sniVal,
 			}
 			
-			// تبدیل استراکت به JSON و سپس Base64
 			vmessJson, _ := json.Marshal(vmessObj)
 			vmessBase64 := base64.StdEncoding.EncodeToString(vmessJson)
 			configs = append(configs, "vmess://"+vmessBase64)
