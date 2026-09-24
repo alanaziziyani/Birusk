@@ -154,18 +154,25 @@ func main() {
 func handleProxy(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
+		log.Printf("[proxy] upgrade failed: %v", err)
 		return
 	}
 	defer conn.Close()
 
 	_, firstChunk, err := conn.ReadMessage()
-	if err != nil || len(firstChunk) < 24 || firstChunk[0] != 0 {
+	if err != nil {
+		log.Printf("[proxy] failed to read first message: %v", err)
+		return
+	}
+	if len(firstChunk) < 24 || firstChunk[0] != 0 {
+		log.Printf("[proxy] bad header: len=%d version=%d", len(firstChunk), firstChunk[0])
 		return
 	}
 
 	uuidBytes := firstChunk[1:17]
 	parsedUUID, err := uuid.FromBytes(uuidBytes)
 	if err != nil {
+		log.Printf("[proxy] invalid uuid bytes: %v", err)
 		return
 	}
 	userID := parsedUUID.String()
@@ -173,10 +180,16 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	var status string
 	var expireTime int64
 	err = DB.QueryRow("SELECT status, expire_time FROM users WHERE id = ?", userID).Scan(&status, &expireTime)
-	if err != nil || status != "active" {
+	if err != nil {
+		log.Printf("[proxy] user %s not found: %v", userID, err)
+		return
+	}
+	if status != "active" {
+		log.Printf("[proxy] user %s not active (status=%s)", userID, status)
 		return
 	}
 	if expireTime > 0 && time.Now().Unix() > expireTime {
+		log.Printf("[proxy] user %s expired", userID)
 		return
 	}
 
@@ -186,6 +199,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	optLen := int(firstChunk[17])
 	pPos := 18 + optLen + 1
 	if len(firstChunk) <= pPos+2 {
+		log.Printf("[proxy] header too short for port/address (optLen=%d)", optLen)
 		return
 	}
 	port := binary.BigEndian.Uint16(firstChunk[pPos : pPos+2])
@@ -196,12 +210,14 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	aLen := 0
 
 	if vPos >= len(firstChunk) {
+		log.Printf("[proxy] header too short for address type %d", aType)
 		return
 	}
 
 	if aType == 1 {
 		aLen = 4
 		if vPos+aLen > len(firstChunk) {
+			log.Printf("[proxy] truncated ipv4 address")
 			return
 		}
 		targetAddr = net.IP(firstChunk[vPos : vPos+aLen]).String()
@@ -209,27 +225,58 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 		aLen = int(firstChunk[vPos])
 		vPos++
 		if vPos+aLen > len(firstChunk) {
+			log.Printf("[proxy] truncated domain address")
 			return
 		}
 		targetAddr = string(firstChunk[vPos : vPos+aLen])
 	} else if aType == 3 {
 		aLen = 16
 		if vPos+aLen > len(firstChunk) {
+			log.Printf("[proxy] truncated ipv6 address")
 			return
 		}
 		targetAddr = net.IP(firstChunk[vPos : vPos+aLen]).String()
 	} else {
+		log.Printf("[proxy] unknown address type %d", aType)
 		return
 	}
 
 	target := fmt.Sprintf("%s:%d", targetAddr, port)
-	targetConn, err := net.Dial("tcp", target)
+	targetConn, err := net.DialTimeout("tcp", target, 8*time.Second)
 	if err != nil {
+		log.Printf("[proxy] dial %s failed: %v", target, err)
 		return
 	}
 	defer targetConn.Close()
+	log.Printf("[proxy] user %s connected -> %s", userID, target)
 
-	conn.WriteMessage(websocket.BinaryMessage, []byte{0, 0})
+	var writeMu sync.Mutex
+	writeMsg := func(messageType int, data []byte) error {
+		writeMu.Lock()
+		defer writeMu.Unlock()
+		return conn.WriteMessage(messageType, data)
+	}
+
+	writeMsg(websocket.BinaryMessage, []byte{0, 0})
+
+	// پینگ دوره‌ای تا اگه پشت این سرور یه پراکسی/لودبالانسر (مثل خودِ لبه‌ی Railway)
+	// کانکشن‌های ساکت رو بعد از یه مدت idle می‌بنده، این کانکشن رو زنده نگه داره.
+	pingStop := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(25 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := writeMsg(websocket.PingMessage, nil); err != nil {
+					return
+				}
+			case <-pingStop:
+				return
+			}
+		}
+	}()
+	defer close(pingStop)
 
 	var tx, rx int64
 	offset := vPos + aLen
@@ -242,6 +289,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 		for {
 			_, msg, err := conn.ReadMessage()
 			if err != nil {
+				log.Printf("[proxy] user %s client read ended: %v", userID, err)
 				break
 			}
 			targetConn.Write(msg)
@@ -254,17 +302,22 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	for {
 		n, err := targetConn.Read(buf)
 		if n > 0 {
-			if err2 := conn.WriteMessage(websocket.BinaryMessage, buf[:n]); err2 != nil {
+			if err2 := writeMsg(websocket.BinaryMessage, buf[:n]); err2 != nil {
+				log.Printf("[proxy] user %s write to client failed: %v", userID, err2)
 				break
 			}
 			atomic.AddInt64(&rx, int64(n))
 		}
 		if err != nil {
+			if err != io.EOF {
+				log.Printf("[proxy] user %s target read ended: %v", userID, err)
+			}
 			break
 		}
 	}
 
 	totalUsage := atomic.LoadInt64(&tx) + atomic.LoadInt64(&rx)
+	log.Printf("[proxy] user %s session ended -> %s (tx=%d rx=%d)", userID, target, atomic.LoadInt64(&tx), atomic.LoadInt64(&rx))
 	if totalUsage > 0 && nodeID != "" {
 		RecordUsage(userID, nodeID, totalUsage)
 	}
@@ -736,6 +789,7 @@ func handleSubscription(w http.ResponseWriter, r *http.Request) {
 		q := url.Values{}
 		q.Add("type", n.Transport)
 		q.Add("security", n.Security)
+		q.Add("encryption", "none")
 
 		// هندل کردن ترنسپورت‌های جدید: xhttp و splithttp
 		if n.Transport == "ws" || n.Transport == "xhttp" || n.Transport == "splithttp" {

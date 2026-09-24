@@ -20,9 +20,14 @@ async function syncConfig(env) {
                 if (data.uuids && Array.isArray(data.uuids)) {
                     authCache = new Set(data.uuids.map(u => u.replace(/-/g, '').toLowerCase()));
                     lastSync = Date.now();
+                    console.log(`[sync] ok, ${authCache.size} active uuid(s)`);
                 }
+            } else {
+                console.error(`[sync] master returned ${resp.status}`);
             }
-        } catch (e) {}
+        } catch (e) {
+            console.error(`[sync] failed: ${e.message}`);
+        }
         syncPromise = null;
     })();
     
@@ -123,6 +128,7 @@ export default {
                     const view = new Uint8Array(data);
                     
                     if (data.byteLength < 24 || view[0] !== 0) {
+                        console.error("[conn] bad header (too short or wrong version)");
                         ws.close(); 
                         return; 
                     }
@@ -130,6 +136,7 @@ export default {
                     const currentUserHex = Array.from(view.slice(1, 17)).map(b => b.toString(16).padStart(2, "0")).join("");
                     
                     if (!authCache.has(currentUserHex)) {
+                        console.error(`[conn] auth rejected for uuid hex ${currentUserHex} (cache size ${authCache.size})`);
                         ws.close(); 
                         return;
                     }
@@ -186,6 +193,7 @@ export default {
                     try {
                         remoteSocket = connect({ hostname: targetAddr, port: port });
                         await remoteSocket.opened;
+                        console.log(`[conn] connected to ${targetAddr}:${port}`);
                         
                         const offset = vPos + aLen;
                         if (offset < data.byteLength) {
@@ -208,12 +216,17 @@ export default {
                                         ws.send(chunk);
                                     }
                                 } catch (err) {
+                                    console.error(`[conn] ws.send failed: ${err.message}`);
                                     cleanup();
                                 }
                             }
-                        })).catch(() => { cleanup(); });
+                        })).catch((err) => {
+                            console.error(`[conn] remote->client pipe ended: ${err.message}`);
+                            cleanup();
+                        });
                         
                     } catch (err) {
+                        console.error(`[conn] connect to ${targetAddr}:${port} failed: ${err.message}`);
                         ws.close();
                         cleanup();
                     }
