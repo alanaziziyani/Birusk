@@ -204,6 +204,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	port := binary.BigEndian.Uint16(firstChunk[pPos : pPos+2])
 	aType := firstChunk[pPos+2]
+	log.Printf("[proxy] debug user=%s optLen=%d pPos=%d port=%d aType=%d raw_hex=%x", userID, optLen, pPos, port, aType, firstChunk[:min(len(firstChunk), 64)])
 
 	var targetAddr string
 	vPos := pPos + 3
@@ -237,7 +238,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 		}
 		targetAddr = net.IP(firstChunk[vPos : vPos+aLen]).String()
 	} else {
-		log.Printf("[proxy] unknown address type %d", aType)
+		log.Printf("[proxy] unknown address type %d (optLen=%d pPos=%d) raw_hex=%x", aType, optLen, pPos, firstChunk[:min(len(firstChunk), 64)])
 		return
 	}
 
