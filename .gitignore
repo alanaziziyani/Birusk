@@ -1,0 +1,4 @@
+*.zip
+birusk.db
+birusk-master/mtg_core
+node_modules/
