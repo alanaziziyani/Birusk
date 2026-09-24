@@ -262,18 +262,18 @@
                     <label>Transport</label>
                     <select id="form-node-transport" onchange="toggleNodeFields()">
                         <option value="ws">WebSocket (WS)</option>
-                        <option value="xhttp">XHTTP / Upgrade</option>
-                        <option value="splithttp">SplitHTTP</option>
-                        <option value="grpc">gRPC</option>
-                        <option value="tcp">TCP (Raw)</option>
+                        <!-- xhttp/splithttp/grpc/tcp نیاز به موتور واقعی xray-core دارن که
+                             فعلاً پیاده نشده؛ تا اون موقع از لیست حذف شدن تا کانفیگ خراب
+                             ساخته نشه. برای اضافه کردنشون به بخش "قدم بعدی" در پاسخ Claude نگاه کن. -->
                     </select>
                 </div>
                 <div class="form-group">
                     <label>Security</label>
                     <select id="form-node-security" onchange="toggleNodeFields()">
                         <option value="tls">TLS</option>
-                        <option value="reality">REALITY</option>
-                        <option value="none">None</option>
+                        <!-- REALITY نیاز به هندشیک TLS جعلی سطح پایینه که نه Cloudflare Worker
+                             و نه سرور فعلی پیاده‌سازیش نمی‌کنن؛ گزینه "None" هم عملاً کاربردی
+                             نداره چون بدون TLS به‌راحتی فیلتر میشه. -->
                     </select>
                 </div>
             </div>

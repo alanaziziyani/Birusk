@@ -1,0 +1,15 @@
+name = "birusk-node"
+main = "worker.js"
+compatibility_date = "2024-09-23"
+
+# بدون این فلگ، کلاینت‌های مبتنی بر Safari/iOS (مثل Shadowrocket, Streisand, FoXray)
+# معمولاً وصل نمیشن چون وب‌سوکت رو با فشرده‌سازی باز می‌کنن که Worker ما پشتیبانی نمی‌کنه.
+compatibility_flags = ["no_web_socket_compression"]
+
+# آدرس پنل روی Railway (بدون اسلش انتهایی). بعد از دیپلوی ریلوی این رو ست کن:
+[vars]
+MASTER_URL = "https://YOUR-PANEL.up.railway.app"
+
+# NODE_TOKEN رو اینجا نذار! توکن مربوط به همین نود که توی پنل ساختی رو
+# با دستور زیر به‌صورت رمزنگاری‌شده ست کن (بعد از هر دیپلوی هم می‌مونه):
+#   npx wrangler secret put NODE_TOKEN

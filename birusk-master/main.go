@@ -195,15 +195,28 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	vPos := pPos + 3
 	aLen := 0
 
+	if vPos >= len(firstChunk) {
+		return
+	}
+
 	if aType == 1 {
 		aLen = 4
+		if vPos+aLen > len(firstChunk) {
+			return
+		}
 		targetAddr = net.IP(firstChunk[vPos : vPos+aLen]).String()
 	} else if aType == 2 {
 		aLen = int(firstChunk[vPos])
 		vPos++
+		if vPos+aLen > len(firstChunk) {
+			return
+		}
 		targetAddr = string(firstChunk[vPos : vPos+aLen])
 	} else if aType == 3 {
 		aLen = 16
+		if vPos+aLen > len(firstChunk) {
+			return
+		}
 		targetAddr = net.IP(firstChunk[vPos : vPos+aLen]).String()
 	} else {
 		return
@@ -696,6 +709,15 @@ func handleSubscription(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var n Node
 		rows.Scan(&n.Name, &n.Type, &n.Address, &n.CleanIP, &n.Port, &n.Transport, &n.Security, &n.Path, &n.Host, &n.Pbk, &n.Sid, &n.Flow, &n.Fingerprint)
+
+		// موتور فعلی (main.go handleProxy و worker.js) فقط هندشیک روی WebSocket ساده رو
+		// پیاده‌سازی کرده و TLS هم توسط خودِ Railway/Cloudflare در لبه انجام میشه (wss://).
+		// gRPC/XHTTP/SplitHTTP/REALITY نیاز به یه موتور واقعی مثل xray-core دارن که فعلاً
+		// وجود نداره؛ تا وقتی اضافه نشده، از تولید کانفیگ برای اون‌ها صرف‌نظر می‌کنیم تا
+		// کاربر سابسکریپشنی نگیره که اصلاً وصل نمیشه.
+		if n.Transport != "ws" || n.Security != "tls" {
+			continue
+		}
 
 		safeAddr := cleanDomain(n.Address)
 		targetIP := safeAddr

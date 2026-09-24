@@ -109,13 +109,20 @@ export default {
             ws.addEventListener("error", () => cleanup());
 
             ws.addEventListener("message", async (e) => {
+              try {
                 const data = e.data;
+
+                if (!(data instanceof ArrayBuffer)) {
+                    // یه فریم متنی یا هرچیز غیرمنتظره؛ پروتکل ما فقط باینریه
+                    ws.close();
+                    return;
+                }
                 
                 if (isFirstChunk) {
                     isFirstChunk = false;
                     const view = new Uint8Array(data);
                     
-                    if (view[0] !== 0) { 
+                    if (data.byteLength < 24 || view[0] !== 0) {
                         ws.close(); 
                         return; 
                     }
@@ -144,16 +151,24 @@ export default {
                     let vPos = pPos + 3;
                     let aLen = 0;
                     let targetAddr = "";
+
+                    if (vPos >= view.length) {
+                        ws.close();
+                        return;
+                    }
                     
                     if (aType === 1) {
                         aLen = 4;
+                        if (vPos + aLen > view.length) { ws.close(); return; }
                         targetAddr = view.slice(vPos, vPos + aLen).join(".");
                     } else if (aType === 2) {
                         aLen = view[vPos];
                         vPos++;
+                        if (vPos + aLen > view.length) { ws.close(); return; }
                         targetAddr = new TextDecoder().decode(view.slice(vPos, vPos + aLen));
                     } else if (aType === 3) {
                         aLen = 16;
+                        if (vPos + aLen > view.length) { ws.close(); return; }
                         const dv = new DataView(data.slice(vPos, vPos + aLen));
                         targetAddr = Array.from({ length: 8 }, (_, i) => dv.getUint16(i * 2).toString(16)).join(":");
                     } else {
@@ -215,6 +230,12 @@ export default {
                 }
                 
                 ctx.waitUntil(flushUsage(env));
+              } catch (err) {
+                // هر خطای پیش‌بینی‌نشده‌ای توی پارس کردن پکت (بسته‌ی خراب/کوتاه) دیگه
+                // کانکشن رو با خطای بی‌صدا نمی‌ندازه، فقط تمیز می‌بندش
+                cleanup();
+                try { ws.close(); } catch (e2) {}
+              }
             });
 
             return new Response(null, { status: 101, webSocket: client });
