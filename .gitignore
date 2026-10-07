@@ -1,4 +1,6 @@
 *.zip
-birusk.db
-birusk-master/mtg_core
+*.db
 node_modules/
+birusk-master/mtg_core
+birusk-master/xray
+birusk-master/xray_config.json

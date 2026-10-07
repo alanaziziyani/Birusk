@@ -5,24 +5,20 @@ import (
 	"compress/gzip"
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/gorilla/websocket"
 )
 
 type User struct {
@@ -79,12 +75,9 @@ type VMessConfig struct {
 	Path string `json:"path"`
 	Tls  string `json:"tls"`
 	Sni  string `json:"sni"`
-}
-
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
+	Aid  string `json:"aid"`
+	Scy  string `json:"scy"`
+	Fp   string `json:"fp"`
 }
 
 var (
@@ -114,17 +107,28 @@ func main() {
 		port = "8080"
 	}
 
-	InitDB("birusk.db")
+	dbPath := os.Getenv("DB_PATH")
+	if dbPath == "" {
+		dbPath = "birusk.db"
+	}
+	InitDB(dbPath)
 
 	initialSettings := loadSettingsFromDB()
 	go applyMtprotoEngine(initialSettings)
+
+	initXrayProxies()
+	go xrayManager()
 
 	mux := http.NewServeMux()
 
 	fs := http.FileServer(http.Dir("./ui"))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if strings.ToLower(r.Header.Get("Upgrade")) == "websocket" {
-			handleProxy(w, r)
+		if strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+			if p := xrayProxyFor(r.URL.Path); p != nil {
+				p.ServeHTTP(w, r)
+				return
+			}
+			http.NotFound(w, r)
 			return
 		}
 		fs.ServeHTTP(w, r)
@@ -149,179 +153,6 @@ func main() {
 
 	log.Printf("AlanCoreNet Master Engine running on port %s", port)
 	log.Fatal(http.ListenAndServe(":"+port, mux))
-}
-
-func handleProxy(w http.ResponseWriter, r *http.Request) {
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Printf("[proxy] upgrade failed: %v", err)
-		return
-	}
-	defer conn.Close()
-
-	_, firstChunk, err := conn.ReadMessage()
-	if err != nil {
-		log.Printf("[proxy] failed to read first message: %v", err)
-		return
-	}
-	if len(firstChunk) < 24 || firstChunk[0] != 0 {
-		log.Printf("[proxy] bad header: len=%d version=%d", len(firstChunk), firstChunk[0])
-		return
-	}
-
-	uuidBytes := firstChunk[1:17]
-	parsedUUID, err := uuid.FromBytes(uuidBytes)
-	if err != nil {
-		log.Printf("[proxy] invalid uuid bytes: %v", err)
-		return
-	}
-	userID := parsedUUID.String()
-
-	var status string
-	var expireTime int64
-	err = DB.QueryRow("SELECT status, expire_time FROM users WHERE id = ?", userID).Scan(&status, &expireTime)
-	if err != nil {
-		log.Printf("[proxy] user %s not found: %v", userID, err)
-		return
-	}
-	if status != "active" {
-		log.Printf("[proxy] user %s not active (status=%s)", userID, status)
-		return
-	}
-	if expireTime > 0 && time.Now().Unix() > expireTime {
-		log.Printf("[proxy] user %s expired", userID)
-		return
-	}
-
-	var nodeID string
-	DB.QueryRow("SELECT id FROM nodes WHERE type = 'railway' AND status = 'active' LIMIT 1").Scan(&nodeID)
-
-	optLen := int(firstChunk[17])
-	pPos := 18 + optLen + 1
-	if len(firstChunk) <= pPos+2 {
-		log.Printf("[proxy] header too short for port/address (optLen=%d)", optLen)
-		return
-	}
-	port := binary.BigEndian.Uint16(firstChunk[pPos : pPos+2])
-	aType := firstChunk[pPos+2]
-	log.Printf("[proxy] debug user=%s optLen=%d pPos=%d port=%d aType=%d raw_hex=%x", userID, optLen, pPos, port, aType, firstChunk[:min(len(firstChunk), 64)])
-
-	var targetAddr string
-	vPos := pPos + 3
-	aLen := 0
-
-	if vPos >= len(firstChunk) {
-		log.Printf("[proxy] header too short for address type %d", aType)
-		return
-	}
-
-	if aType == 1 {
-		aLen = 4
-		if vPos+aLen > len(firstChunk) {
-			log.Printf("[proxy] truncated ipv4 address")
-			return
-		}
-		targetAddr = net.IP(firstChunk[vPos : vPos+aLen]).String()
-	} else if aType == 2 {
-		aLen = int(firstChunk[vPos])
-		vPos++
-		if vPos+aLen > len(firstChunk) {
-			log.Printf("[proxy] truncated domain address")
-			return
-		}
-		targetAddr = string(firstChunk[vPos : vPos+aLen])
-	} else if aType == 3 {
-		aLen = 16
-		if vPos+aLen > len(firstChunk) {
-			log.Printf("[proxy] truncated ipv6 address")
-			return
-		}
-		targetAddr = net.IP(firstChunk[vPos : vPos+aLen]).String()
-	} else {
-		log.Printf("[proxy] unknown address type %d (optLen=%d pPos=%d) raw_hex=%x", aType, optLen, pPos, firstChunk[:min(len(firstChunk), 64)])
-		return
-	}
-
-	target := fmt.Sprintf("%s:%d", targetAddr, port)
-	targetConn, err := net.DialTimeout("tcp", target, 8*time.Second)
-	if err != nil {
-		log.Printf("[proxy] dial %s failed: %v", target, err)
-		return
-	}
-	defer targetConn.Close()
-	log.Printf("[proxy] user %s connected -> %s", userID, target)
-
-	var writeMu sync.Mutex
-	writeMsg := func(messageType int, data []byte) error {
-		writeMu.Lock()
-		defer writeMu.Unlock()
-		return conn.WriteMessage(messageType, data)
-	}
-
-	writeMsg(websocket.BinaryMessage, []byte{0, 0})
-
-	// پینگ دوره‌ای تا اگه پشت این سرور یه پراکسی/لودبالانسر (مثل خودِ لبه‌ی Railway)
-	// کانکشن‌های ساکت رو بعد از یه مدت idle می‌بنده، این کانکشن رو زنده نگه داره.
-	pingStop := make(chan struct{})
-	go func() {
-		ticker := time.NewTicker(25 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				if err := writeMsg(websocket.PingMessage, nil); err != nil {
-					return
-				}
-			case <-pingStop:
-				return
-			}
-		}
-	}()
-	defer close(pingStop)
-
-	var tx, rx int64
-	offset := vPos + aLen
-	if offset < len(firstChunk) {
-		targetConn.Write(firstChunk[offset:])
-		atomic.AddInt64(&tx, int64(len(firstChunk)-offset))
-	}
-
-	go func() {
-		for {
-			_, msg, err := conn.ReadMessage()
-			if err != nil {
-				log.Printf("[proxy] user %s client read ended: %v", userID, err)
-				break
-			}
-			targetConn.Write(msg)
-			atomic.AddInt64(&tx, int64(len(msg)))
-		}
-		targetConn.Close()
-	}()
-
-	buf := make([]byte, 32*1024)
-	for {
-		n, err := targetConn.Read(buf)
-		if n > 0 {
-			if err2 := writeMsg(websocket.BinaryMessage, buf[:n]); err2 != nil {
-				log.Printf("[proxy] user %s write to client failed: %v", userID, err2)
-				break
-			}
-			atomic.AddInt64(&rx, int64(n))
-		}
-		if err != nil {
-			if err != io.EOF {
-				log.Printf("[proxy] user %s target read ended: %v", userID, err)
-			}
-			break
-		}
-	}
-
-	totalUsage := atomic.LoadInt64(&tx) + atomic.LoadInt64(&rx)
-	log.Printf("[proxy] user %s session ended -> %s (tx=%d rx=%d)", userID, target, atomic.LoadInt64(&tx), atomic.LoadInt64(&rx))
-	if totalUsage > 0 && nodeID != "" {
-		RecordUsage(userID, nodeID, totalUsage)
-	}
 }
 
 func loadSettingsFromDB() AppSettings {
@@ -536,6 +367,7 @@ func handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	requestXrayReload()
 	w.WriteHeader(http.StatusCreated)
 }
 
@@ -543,6 +375,7 @@ func handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("id")
 	DB.Exec("DELETE FROM node_usage WHERE user_id = ?", id)
 	DB.Exec("DELETE FROM users WHERE id = ?", id)
+	requestXrayReload()
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -574,6 +407,7 @@ func handleEditUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	requestXrayReload()
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -668,27 +502,12 @@ func handleNodeSync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := DB.Query("SELECT id, expire_time FROM users WHERE status = 'active'")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
-	var activeUUIDs []string
-	now := time.Now().Unix()
-
-	for rows.Next() {
-		var id string
-		var exp int64
-		rows.Scan(&id, &exp)
-		if exp == 0 || exp > now {
-			activeUUIDs = append(activeUUIDs, id)
+	// نود Cloudflare فقط VLESS رو پشتیبانی می‌کنه؛ همون منطق انقضا/حجم که xray داره
+	activeUUIDs := []string{}
+	for _, u := range allowedXrayUsers() {
+		if u.Vless {
+			activeUUIDs = append(activeUUIDs, u.ID)
 		}
-	}
-
-	if activeUUIDs == nil {
-		activeUUIDs = []string{}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -727,7 +546,13 @@ func handleReportUsage(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// موتور ارتقا یافته با xhttp، splithttp و uTLS
+type linkSpec struct {
+	proto string
+	path  string
+}
+
+var protoLabels = map[string]string{"vless": "VLESS", "trojan": "Trojan", "vmess": "VMess"}
+
 func handleSubscription(w http.ResponseWriter, r *http.Request) {
 	userID := r.URL.Query().Get("id")
 	if userID == "" {
@@ -751,31 +576,29 @@ func handleSubscription(w http.ResponseWriter, r *http.Request) {
 
 	settings := loadSettingsFromDB()
 
-	rows, err := DB.Query("SELECT name, type, address, clean_ip, port, transport, security, path, host, pbk, sid, flow, fingerprint FROM nodes WHERE status = 'active'")
+	rows, err := DB.Query("SELECT name, type, address, clean_ip, port, transport, security, path, host, fingerprint FROM nodes WHERE status = 'active'")
 	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-	defer rows.Close()
+	var nodes []Node
+	for rows.Next() {
+		var n Node
+		rows.Scan(&n.Name, &n.Type, &n.Address, &n.CleanIP, &n.Port, &n.Transport, &n.Security, &n.Path, &n.Host, &n.Fingerprint)
+		nodes = append(nodes, n)
+	}
+	rows.Close()
 
 	var configs []string
 
-	for rows.Next() {
-		var n Node
-		rows.Scan(&n.Name, &n.Type, &n.Address, &n.CleanIP, &n.Port, &n.Transport, &n.Security, &n.Path, &n.Host, &n.Pbk, &n.Sid, &n.Flow, &n.Fingerprint)
-
-		// موتور فعلی (main.go handleProxy و worker.js) فقط هندشیک روی WebSocket ساده رو
-		// پیاده‌سازی کرده و TLS هم توسط خودِ Railway/Cloudflare در لبه انجام میشه (wss://).
-		// gRPC/XHTTP/SplitHTTP/REALITY نیاز به یه موتور واقعی مثل xray-core دارن که فعلاً
-		// وجود نداره؛ تا وقتی اضافه نشده، از تولید کانفیگ برای اون‌ها صرف‌نظر می‌کنیم تا
-		// کاربر سابسکریپشنی نگیره که اصلاً وصل نمیشه.
+	for _, n := range nodes {
+		// فعلاً فقط WS روی TLS پشتیبانی میشه (TLS رو لبه‌ی Railway/Cloudflare تموم می‌کنه)
 		if n.Transport != "ws" || n.Security != "tls" {
 			continue
 		}
 
 		safeAddr := cleanDomain(n.Address)
 		targetIP := safeAddr
-
 		if n.CleanIP != "" {
 			targetIP = cleanDomain(n.CleanIP)
 		} else if settings.DefaultCleanIp != "" {
@@ -787,73 +610,75 @@ func handleSubscription(w http.ResponseWriter, r *http.Request) {
 			remarkName = strings.TrimSpace(customRemark)
 		}
 
-		q := url.Values{}
-		q.Add("type", n.Transport)
-		q.Add("security", n.Security)
-		q.Add("encryption", "none")
-
-		// هندل کردن ترنسپورت‌های جدید: xhttp و splithttp
-		if n.Transport == "ws" || n.Transport == "xhttp" || n.Transport == "splithttp" {
-			q.Add("path", n.Path)
-			if n.Host != "" { q.Add("host", n.Host) } else { q.Add("host", safeAddr) }
-		} else if n.Transport == "grpc" {
-			q.Add("serviceName", n.Path)
-			q.Add("mode", "multi")
+		sni := safeAddr
+		if n.Host != "" {
+			sni = n.Host
+		}
+		fp := n.Fingerprint
+		if fp == "" {
+			fp = "chrome"
+		}
+		nodePath := n.Path
+		if nodePath == "" {
+			nodePath = "/"
 		}
 
-		// هندل کردن امنیت و uTLS Fingerprint
-		if n.Security == "tls" || n.Security == "reality" {
-			if n.Host != "" { q.Add("sni", n.Host) } else { q.Add("sni", safeAddr) }
-			
-			fp := n.Fingerprint
-			if fp == "" { fp = "chrome" }
-			q.Add("fp", fp)
-			
-			// اضافه کردن استاندارد ALPN برای xhttp و splithttp جهت سرعت و عبور بهتر
-			if n.Transport == "xhttp" || n.Transport == "splithttp" {
-				q.Add("alpn", "h2,http/1.1")
+		var specs []linkSpec
+		if n.Type == "railway" {
+			// نود Railway = xray-core واقعی؛ هر پروتکل path مخصوص خودش رو داره
+			if vlessEnabled == 1 {
+				specs = append(specs, linkSpec{"vless", "/vless"})
+			}
+			if trojanEnabled == 1 {
+				specs = append(specs, linkSpec{"trojan", "/trojan"})
+			}
+			if vmessEnabled == 1 {
+				specs = append(specs, linkSpec{"vmess", "/vmess"})
+			}
+		} else {
+			// نود Cloudflare Worker فقط VLESS رو می‌فهمه
+			if vlessEnabled == 1 {
+				specs = append(specs, linkSpec{"vless", nodePath})
 			}
 		}
 
-		if n.Security == "reality" {
-			q.Add("pbk", n.Pbk)
-			q.Add("sid", n.Sid)
-			if n.Flow != "" { q.Add("flow", n.Flow) }
-		}
+		for _, sp := range specs {
+			label := url.PathEscape(remarkName) + "-" + protoLabels[sp.proto]
 
-		queryString := q.Encode()
+			switch sp.proto {
+			case "vless", "trojan":
+				q := url.Values{}
+				q.Add("type", "ws")
+				q.Add("security", "tls")
+				q.Add("path", sp.path)
+				q.Add("host", sni)
+				q.Add("sni", sni)
+				q.Add("fp", fp)
+				if sp.proto == "vless" {
+					q.Add("encryption", "none")
+				}
+				configs = append(configs, fmt.Sprintf("%s://%s@%s:%d?%s#%s", sp.proto, userID, targetIP, n.Port, q.Encode(), label))
 
-		if vlessEnabled == 1 {
-			vlessUrl := fmt.Sprintf("vless://%s@%s:%d?%s#%s-VLESS", userID, targetIP, n.Port, queryString, url.PathEscape(remarkName))
-			configs = append(configs, vlessUrl)
-		}
-		
-		if trojanEnabled == 1 {
-			trojanUrl := fmt.Sprintf("trojan://%s@%s:%d?%s#%s-Trojan", userID, targetIP, n.Port, queryString, url.PathEscape(remarkName))
-			configs = append(configs, trojanUrl)
-		}
-
-		if vmessEnabled == 1 {
-			sniVal := safeAddr
-			if n.Host != "" { sniVal = n.Host }
-			
-			vmessObj := VMessConfig{
-				V:    "2",
-				Ps:   remarkName + "-VMess",
-				Add:  targetIP,
-				Port: fmt.Sprint(n.Port),
-				Id:   userID,
-				Net:  n.Transport,
-				Type: "none",
-				Host: sniVal,
-				Path: n.Path,
-				Tls:  n.Security,
-				Sni:  sniVal,
+			case "vmess":
+				vmessObj := VMessConfig{
+					V:    "2",
+					Ps:   remarkName + "-VMess",
+					Add:  targetIP,
+					Port: fmt.Sprint(n.Port),
+					Id:   userID,
+					Net:  "ws",
+					Type: "none",
+					Host: sni,
+					Path: sp.path,
+					Tls:  "tls",
+					Sni:  sni,
+					Aid:  "0",
+					Scy:  "auto",
+					Fp:   fp,
+				}
+				vmessJson, _ := json.Marshal(vmessObj)
+				configs = append(configs, "vmess://"+base64.StdEncoding.EncodeToString(vmessJson))
 			}
-			
-			vmessJson, _ := json.Marshal(vmessObj)
-			vmessBase64 := base64.StdEncoding.EncodeToString(vmessJson)
-			configs = append(configs, "vmess://"+vmessBase64)
 		}
 	}
 

@@ -145,6 +145,17 @@ export default {
                     recordUsage(currentUserId, data.byteLength);
 
                     const optLen = view[17];
+                    const command = view[18 + optLen];
+                    if (command === 3) {
+                        console.error("[conn] client sent MUX (command 3): Mux is not supported on Worker nodes, disable Mux in the client app");
+                        ws.close();
+                        return;
+                    }
+                    if (command !== 1) {
+                        console.error(`[conn] unsupported command ${command} (only TCP is supported on Worker nodes)`);
+                        ws.close();
+                        return;
+                    }
                     const pPos = 18 + optLen + 1;
                     
                     if (data.byteLength <= pPos + 2) {
